@@ -29,22 +29,30 @@ export default function AccountsPage() {
     setOpen(true)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const { code, name, type, balance, hasSub } = form
     if (!code.trim() || !name.trim()) { alert('コードと科目名を入力してください'); return }
     const account: Account = { code: code.trim(), name: name.trim(), type, balance: parseInt(balance) || 0, hasSub }
-    if (editIdx !== null) {
-      updateAccount(editIdx, account)
-    } else {
-      if (accounts.find(a => a.code === account.code)) { alert('同じコードの科目が既に存在します'); return }
-      addAccount(account)
+    try {
+      if (editIdx !== null) {
+        await updateAccount(editIdx, account)
+      } else {
+        if (accounts.find(a => a.code === account.code)) { alert('同じコードの科目が既に存在します'); return }
+        await addAccount(account)
+      }
+      setOpen(false)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '保存に失敗しました')
     }
-    setOpen(false)
   }
 
-  const handleDelete = (i: number) => {
+  const handleDelete = async (i: number) => {
     if (!confirm(`「${accounts[i].name}」を削除しますか？`)) return
-    deleteAccount(i)
+    try {
+      await deleteAccount(i)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '削除に失敗しました')
+    }
   }
 
   const set = <K extends keyof AccountForm>(key: K, val: AccountForm[K]) =>

@@ -22,21 +22,29 @@ export default function PartnersPage() {
   const openNew = () => { setForm(emptyForm()); setEditIdx(null); setOpen(true) }
   const openEdit = (i: number) => { setForm({ ...partners[i] }); setEditIdx(i); setOpen(true) }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.code.trim() || !form.name.trim()) { alert('コードと取引先名を入力してください'); return }
     const p: Partner = { ...form, code: form.code.trim(), name: form.name.trim() }
-    if (editIdx !== null) {
-      updatePartner(editIdx, p)
-    } else {
-      if (partners.find(x => x.code === p.code)) { alert('同じコードの取引先が既に存在します'); return }
-      addPartner(p)
+    try {
+      if (editIdx !== null) {
+        await updatePartner(editIdx, p)
+      } else {
+        if (partners.find(x => x.code === p.code)) { alert('同じコードの取引先が既に存在します'); return }
+        await addPartner(p)
+      }
+      setOpen(false)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '保存に失敗しました')
     }
-    setOpen(false)
   }
 
-  const handleDelete = (i: number) => {
+  const handleDelete = async (i: number) => {
     if (!confirm(`「${partners[i].name}」を削除しますか？`)) return
-    deletePartner(i)
+    try {
+      await deletePartner(i)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '削除に失敗しました')
+    }
   }
 
   const set = <K extends keyof PartnerForm>(key: K, val: PartnerForm[K]) =>

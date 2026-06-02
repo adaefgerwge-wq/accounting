@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "npm run dev --prefix server",
+    "build:server": "npm run build --prefix server",
+    "db:setup": "npm run db:setup --prefix server",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

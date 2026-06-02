@@ -237,6 +237,69 @@ tr:hover td { background: #fafaf7; }
 .form-row input, .form-row select { width: 100%; }
 .form-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.template-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+button.template-btn {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 8px;
+  text-align: left;
+}
+.template-btn span {
+  font-size: 12px;
+  font-weight: 500;
+}
+.template-btn small {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.35;
+}
+.candidate-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.candidate-row span {
+  font-size: 10px;
+  color: #999;
+  margin-right: 1px;
+}
+.candidate-row button {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #534AB7;
+  border-color: #d0cdf5;
+  background: #f7f6ff;
+}
+.required-mark {
+  margin-left: 5px;
+  font-size: 10px;
+  color: #c0392b;
+}
+.balance-check {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fafaf7;
+  border: 0.5px solid #e8e5dc;
+  font-size: 11px;
+  color: #888;
+}
+.balance-check.ok {
+  background: #eaf3de;
+  border-color: #c7dfab;
+  color: #27500A;
+}
 .modal-footer {
   display: flex;
   gap: 8px;
