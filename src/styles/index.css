@@ -360,3 +360,18 @@ button.template-btn {
   font-size: 13px;
 }
 .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; }
+
+/* ── 消費税タグ ── */
+.tax-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.tax-none        { background: #f0ede6; color: #888; }
+.tax-taxable10   { background: #EEEDFE; color: #3C3489; }
+.tax-taxable8    { background: #EAF3DE; color: #27500A; }
+.tax-exempt      { background: #FAECE7; color: #993C1D; }
+.tax-non_taxable { background: #f5f4f0; color: #aaa; }

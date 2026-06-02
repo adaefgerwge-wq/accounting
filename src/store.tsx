@@ -1,149 +1,106 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import type { Account, Partner, Journal, PageId } from './types'
+import type { Account, Partner, Journal, PageId, FiscalYear } from './types'
 import { initialAccounts, initialPartners, initialJournals } from './data'
 import { api } from './api'
-
-// ─── State 型 ────────────────────────────────────────────────────────────────
 
 interface AppState {
   accounts: Account[]
   partners: Partner[]
   journals: Journal[]
+  fiscalYears: FiscalYear[]
   currentPage: PageId
-  nextId: number
+  currentFiscalYearId: number | null
   loading: boolean
   error: string | null
 }
-
 interface AppActions {
   setPage: (page: PageId) => void
-
-  // 仕訳
-  addJournal: (j: Omit<Journal, 'id'>) => Promise<void>
+  setCurrentFiscalYearId: (id: number | null) => void
+  addJournal: (j: Omit<Journal,'id'>) => Promise<void>
   updateJournal: (j: Journal) => Promise<void>
   deleteJournal: (id: number) => Promise<void>
-
-  // 勘定科目
   addAccount: (a: Account) => Promise<void>
   updateAccount: (index: number, a: Account) => Promise<void>
   deleteAccount: (index: number) => Promise<void>
-
-  // 取引先
   addPartner: (p: Partner) => Promise<void>
   updatePartner: (index: number, p: Partner) => Promise<void>
   deletePartner: (index: number) => Promise<void>
+  addFiscalYear: (fy: Omit<FiscalYear,'id'|'closed'>) => Promise<void>
+  closeFiscalYear: (id: number) => Promise<void>
+  deleteFiscalYear: (id: number) => Promise<void>
+  reload: () => Promise<void>
 }
-
 type AppContextType = AppState & AppActions
-
-// ─── Context ─────────────────────────────────────────────────────────────────
 
 const AppContext = createContext<AppContextType | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [accounts, setAccounts] = useState<Account[]>(initialAccounts)
-  const [partners, setPartners] = useState<Partner[]>(initialPartners)
-  const [journals, setJournals] = useState<Journal[]>(initialJournals)
+  const [accounts,    setAccounts]    = useState<Account[]>(initialAccounts)
+  const [partners,    setPartners]    = useState<Partner[]>(initialPartners)
+  const [journals,    setJournals]    = useState<Journal[]>(initialJournals)
+  const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>([])
   const [currentPage, setCurrentPage] = useState<PageId>('journal')
-  const [nextId, setNextId] = useState(5)
+  const [currentFiscalYearId, setCurrentFiscalYearId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
 
-  const syncNextId = useCallback((items: Journal[]) => {
-    setNextId(Math.max(0, ...items.map(j => j.id)) + 1)
-  }, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.getState()
+      setAccounts(data.accounts)
+      setPartners(data.partners)
+      setJournals(data.journals)
+      setFiscalYears(data.fiscalYears)
+      if (data.fiscalYears.length && currentFiscalYearId === null) {
+        const open = data.fiscalYears.find(f => !f.closed)
+        setCurrentFiscalYearId(open?.id ?? data.fiscalYears[0].id)
+      }
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'データの読み込みに失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentFiscalYearId])
 
-  useEffect(() => {
-    let active = true
+  useEffect(() => { load() }, []) // eslint-disable-line
 
-    api.getState()
-      .then(data => {
-        if (!active) return
-        setAccounts(data.accounts)
-        setPartners(data.partners)
-        setJournals(data.journals)
-        syncNextId(data.journals)
-        setError(null)
-      })
-      .catch(err => {
-        if (!active) return
-        setError(err instanceof Error ? err.message : 'データの読み込みに失敗しました')
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-
-    return () => { active = false }
-  }, [syncNextId])
+  const reload = useCallback(async () => { await load() }, [load])
 
   const setPage = useCallback((page: PageId) => setCurrentPage(page), [])
 
-  // ── 仕訳 ────────────────────────────────────────────────────────────────────
-
-  const addJournal = useCallback(async (j: Omit<Journal, 'id'>) => {
-    const data = await api.addJournal(j)
-    setAccounts(data.accounts)
-    setJournals(data.journals)
-    syncNextId(data.journals)
-  }, [syncNextId])
-
-  const updateJournal = useCallback(async (updated: Journal) => {
-    const data = await api.updateJournal(updated)
-    setAccounts(data.accounts)
-    setJournals(data.journals)
-    syncNextId(data.journals)
-  }, [syncNextId])
-
+  const addJournal = useCallback(async (j: Omit<Journal,'id'>) => {
+    const data = await api.addJournal(j); setAccounts(data.accounts); setJournals(data.journals)
+  }, [])
+  const updateJournal = useCallback(async (j: Journal) => {
+    const data = await api.updateJournal(j); setAccounts(data.accounts); setJournals(data.journals)
+  }, [])
   const deleteJournal = useCallback(async (id: number) => {
-    const data = await api.deleteJournal(id)
-    setAccounts(data.accounts)
-    setJournals(data.journals)
-    syncNextId(data.journals)
-  }, [syncNextId])
-
-  // ── 勘定科目 ────────────────────────────────────────────────────────────────
-
-  const addAccount = useCallback(async (a: Account) => {
-    setAccounts(await api.addAccount(a))
+    const data = await api.deleteJournal(id); setAccounts(data.accounts); setJournals(data.journals)
   }, [])
 
-  const updateAccount = useCallback(async (index: number, a: Account) => {
-    const old = accounts[index]
-    if (!old) return
-    setAccounts(await api.updateAccount(old.code, a))
-  }, [accounts])
+  const addAccount    = useCallback(async (a: Account)            => setAccounts(await api.addAccount(a)), [])
+  const updateAccount = useCallback(async (i: number, a: Account) => setAccounts(await api.updateAccount(accounts[i].code, a)), [accounts])
+  const deleteAccount = useCallback(async (i: number)             => setAccounts(await api.deleteAccount(accounts[i].code)), [accounts])
 
-  const deleteAccount = useCallback(async (index: number) => {
-    const account = accounts[index]
-    if (!account) return
-    setAccounts(await api.deleteAccount(account.code))
-  }, [accounts])
+  const addPartner    = useCallback(async (p: Partner)            => setPartners(await api.addPartner(p)), [])
+  const updatePartner = useCallback(async (i: number, p: Partner) => setPartners(await api.updatePartner(partners[i].code, p)), [partners])
+  const deletePartner = useCallback(async (i: number)             => setPartners(await api.deletePartner(partners[i].code)), [partners])
 
-  // ── 取引先 ──────────────────────────────────────────────────────────────────
-
-  const addPartner = useCallback(async (p: Partner) => {
-    setPartners(await api.addPartner(p))
-  }, [])
-
-  const updatePartner = useCallback(async (index: number, p: Partner) => {
-    const old = partners[index]
-    if (!old) return
-    setPartners(await api.updatePartner(old.code, p))
-  }, [partners])
-
-  const deletePartner = useCallback(async (index: number) => {
-    const partner = partners[index]
-    if (!partner) return
-    setPartners(await api.deletePartner(partner.code))
-  }, [partners])
+  const addFiscalYear   = useCallback(async (fy: Omit<FiscalYear,'id'|'closed'>) => setFiscalYears(await api.addFiscalYear(fy)), [])
+  const closeFiscalYear = useCallback(async (id: number) => setFiscalYears(await api.closeFiscalYear(id)), [])
+  const deleteFiscalYear= useCallback(async (id: number) => setFiscalYears(await api.deleteFiscalYear(id)), [])
 
   return (
     <AppContext.Provider value={{
-      accounts, partners, journals, currentPage, nextId, loading, error,
-      setPage,
+      accounts, partners, journals, fiscalYears, currentPage, currentFiscalYearId,
+      loading, error,
+      setPage, setCurrentFiscalYearId, reload,
       addJournal, updateJournal, deleteJournal,
       addAccount, updateAccount, deleteAccount,
       addPartner, updatePartner, deletePartner,
+      addFiscalYear, closeFiscalYear, deleteFiscalYear,
     }}>
       {children}
     </AppContext.Provider>
