@@ -109,3 +109,44 @@ export async function seedIfEmpty() {
     connection.release()
   }
 }
+
+export async function ensureInvoiceSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      invoice_no    VARCHAR(50)  NOT NULL UNIQUE,
+      partner_code  VARCHAR(20)  NOT NULL DEFAULT '',
+      partner_name  VARCHAR(255) NOT NULL DEFAULT '',
+      partner_addr  VARCHAR(500) NOT NULL DEFAULT '',
+      issue_date    DATE         NOT NULL,
+      due_date      DATE         NOT NULL,
+      memo          VARCHAR(1000) NOT NULL DEFAULT '',
+      status        ENUM('draft','sent','paid') NOT NULL DEFAULT 'draft',
+      created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      invoice_id  INT           NOT NULL,
+      description VARCHAR(255)  NOT NULL,
+      qty         DECIMAL(10,2) NOT NULL DEFAULT 1,
+      unit_price  INT           NOT NULL,
+      tax_type    ENUM('taxable10','taxable8','exempt') NOT NULL DEFAULT 'taxable10',
+      FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+    )
+  `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bank_rules (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      name         VARCHAR(100) NOT NULL,
+      keyword      VARCHAR(255) NOT NULL,
+      debit_code   VARCHAR(20)  NOT NULL,
+      credit_code  VARCHAR(20)  NOT NULL,
+      memo_tpl     VARCHAR(255) NOT NULL DEFAULT '',
+      priority     INT          NOT NULL DEFAULT 0,
+      created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+}

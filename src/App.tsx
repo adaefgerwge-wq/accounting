@@ -8,6 +8,8 @@ import PL from './components/PL'
 import TrialBalance from './components/TrialBalance'
 import FiscalYears from './components/FiscalYears'
 import Settings from './components/Settings'
+import Invoices from './components/Invoices'
+import BankImport from './components/BankImport'
 
 export default function App() {
   const { currentPage, loading, error } = useApp()
@@ -19,6 +21,8 @@ export default function App() {
         {error   && <div className="alert alert-error" style={{margin:16}}>APIに接続できません: {error}</div>}
         {currentPage === 'journal'       && <Journal />}
         {currentPage === 'trial-balance' && <TrialBalance />}
+        {currentPage === 'invoices'      && <Invoices />}
+        {currentPage === 'bank-import'   && <BankImport />}
         {currentPage === 'accounts'      && <Accounts />}
         {currentPage === 'partners'      && <Partners />}
         {currentPage === 'bs'            && <BS />}

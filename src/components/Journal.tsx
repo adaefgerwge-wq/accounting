@@ -88,31 +88,53 @@ export default function JournalPage() {
         {!isClosed && <button className="primary" onClick={openNew}><i className="ti ti-plus" /> 新規仕訳</button>}
         {isClosed  && <span style={{ fontSize:12, color:'#c0392b', marginLeft:4 }}>この年度は締め済みです</span>}
       </div>
-      <div className="content">
+      <div className="content" style={{overflow:'auto'}}>
         {alertMsg && <div className="alert alert-success">{alertMsg}</div>}
-        <table>
-          <thead><tr><th>日付</th><th>借方科目</th><th>借方補助</th><th>貸方科目</th><th>貸方補助</th><th>消費税</th><th style={{textAlign:'right'}}>金額</th><th>摘要</th><th /></tr></thead>
-          <tbody>
-            {filteredJournals.length === 0
-              ? <tr><td colSpan={9}><div className="empty-state"><i className="ti ti-notes-off" />仕訳がありません</div></td></tr>
-              : filteredJournals.map(j => (
-                <tr key={j.id}>
-                  <td style={{whiteSpace:'nowrap',color:'#888'}}>{j.date}</td>
-                  <td>{getAccountName(j.debit)}</td>
-                  <td>{j.debitPartner  ? <span className="partner-chip"><i className="ti ti-building" style={{fontSize:10}} />{getPartnerName(j.debitPartner)}</span>  : <span style={{color:'#ccc'}}>—</span>}</td>
-                  <td>{getAccountName(j.credit)}</td>
-                  <td>{j.creditPartner ? <span className="partner-chip"><i className="ti ti-building" style={{fontSize:10}} />{getPartnerName(j.creditPartner)}</span> : <span style={{color:'#ccc'}}>—</span>}</td>
-                  <td><span className={`tax-tag tax-${j.taxType}`}>{TAX_LABELS[j.taxType]}</span></td>
-                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{j.amount.toLocaleString()}</td>
-                  <td style={{color:'#555',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.memo}</td>
-                  <td><div className="actions-cell">
-                    {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
-                    {!isClosed && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
-                  </div></td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <div style={{overflowX:'auto'}}>
+          <table style={{minWidth:900, whiteSpace:'nowrap'}}>
+            <thead>
+              <tr>
+                <th rowSpan={2} style={{verticalAlign:'middle', borderRight:'0.5px solid #e8e5dc'}}>日付</th>
+                <th colSpan={4} style={{textAlign:'center', borderBottom:'0.5px solid #e8e5dc', borderRight:'0.5px solid #e8e5dc', background:'#f0f0fa', color:'#3C3489'}}>借方</th>
+                <th colSpan={4} style={{textAlign:'center', borderBottom:'0.5px solid #e8e5dc', borderRight:'0.5px solid #e8e5dc', background:'#fef0ee', color:'#993C1D'}}>貸方</th>
+                <th rowSpan={2} style={{verticalAlign:'middle'}}>摘要</th>
+                <th rowSpan={2} style={{verticalAlign:'middle'}} />
+              </tr>
+              <tr>
+                <th style={{background:'#f7f7fd'}}>科目</th>
+                <th style={{background:'#f7f7fd'}}>補助</th>
+                <th style={{background:'#f7f7fd', textAlign:'right'}}>金額</th>
+                <th style={{background:'#f7f7fd', borderRight:'0.5px solid #e8e5dc'}}>消費税</th>
+                <th style={{background:'#fff8f7'}}>科目</th>
+                <th style={{background:'#fff8f7'}}>補助</th>
+                <th style={{background:'#fff8f7', textAlign:'right'}}>金額</th>
+                <th style={{background:'#fff8f7', borderRight:'0.5px solid #e8e5dc'}}>消費税</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredJournals.length === 0
+                ? <tr><td colSpan={11}><div className="empty-state"><i className="ti ti-notes-off" />仕訳がありません</div></td></tr>
+                : filteredJournals.map(j => (
+                  <tr key={j.id}>
+                    <td style={{color:'#888', borderRight:'0.5px solid #f0ede6'}}>{j.date}</td>
+                    <td>{getAccountName(j.debit)}</td>
+                    <td>{j.debitPartner ? <span className="partner-chip"><i className="ti ti-building" style={{fontSize:10}} />{getPartnerName(j.debitPartner)}</span> : <span style={{color:'#ccc'}}>—</span>}</td>
+                    <td style={{textAlign:'right', fontVariantNumeric:'tabular-nums'}}>{j.amount.toLocaleString()}</td>
+                    <td style={{borderRight:'0.5px solid #f0ede6'}}><span className={`tax-tag tax-${j.taxType}`}>{TAX_LABELS[j.taxType]}</span></td>
+                    <td>{getAccountName(j.credit)}</td>
+                    <td>{j.creditPartner ? <span className="partner-chip"><i className="ti ti-building" style={{fontSize:10}} />{getPartnerName(j.creditPartner)}</span> : <span style={{color:'#ccc'}}>—</span>}</td>
+                    <td style={{textAlign:'right', fontVariantNumeric:'tabular-nums'}}>{j.amount.toLocaleString()}</td>
+                    <td style={{borderRight:'0.5px solid #f0ede6'}}><span className={`tax-tag tax-${j.taxType}`}>{TAX_LABELS[j.taxType]}</span></td>
+                    <td style={{color:'#555', maxWidth:160, overflow:'hidden', textOverflow:'ellipsis'}}>{j.memo}</td>
+                    <td><div className="actions-cell">
+                      {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
+                      {!isClosed && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
+                    </div></td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {open && (

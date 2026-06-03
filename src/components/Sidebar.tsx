@@ -5,6 +5,8 @@ const NAV: { section: string; items: { id: PageId; icon: string; label: string }
   { section: '帳票', items: [
     { id: 'journal',       icon: 'ti-file-text',      label: '仕訳帳' },
     { id: 'trial-balance', icon: 'ti-table',           label: '試算表' },
+    { id: 'invoices',      icon: 'ti-file-invoice',    label: '請求書' },
+    { id: 'bank-import',   icon: 'ti-building-bank',   label: '銀行取り込み' },
   ]},
   { section: '財務諸表', items: [
     { id: 'bs', icon: 'ti-layout-columns', label: '貸借対照表' },
