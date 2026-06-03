@@ -16,7 +16,6 @@ export default function TrialBalancePage() {
 
   const totalDebit  = sorted.filter(a => ['asset','expense'].includes(a.type)).reduce((s,a) => s+a.balance, 0)
   const totalCredit = sorted.filter(a => ['liability','equity','revenue'].includes(a.type)).reduce((s,a) => s+a.balance, 0)
-  const isBalanced  = totalDebit === totalCredit
 
   return (
     <div className="page" style={{ display:'flex', flexDirection:'column', height:'100%' }}>
@@ -27,12 +26,9 @@ export default function TrialBalancePage() {
         </a>
       </div>
       <div className="content">
-        <div style={{ marginBottom:12, display:'flex', gap:16 }}>
-          <div className={`balance-check ${isBalanced ? 'ok' : ''}`} style={{ flex:'none' }}>
-            <span>借方合計 {totalDebit.toLocaleString()} 円</span>
-            <span>貸方合計 {totalCredit.toLocaleString()} 円</span>
-            <strong>{isBalanced ? '✓ 貸借一致' : '⚠ 貸借不一致'}</strong>
-          </div>
+        <div style={{ display:'flex', gap:24, marginBottom:12, fontSize:13, color:'#555' }}>
+          <div>借方合計（資産・費用）: <strong>{totalDebit.toLocaleString()} 円</strong></div>
+          <div>貸方合計（負債・純資産・収益）: <strong>{totalCredit.toLocaleString()} 円</strong></div>
         </div>
         <table>
           <thead>
@@ -50,10 +46,10 @@ export default function TrialBalancePage() {
                   <td style={{color:'#888'}}>{a.code}</td>
                   <td>{a.name}</td>
                   <td><span className={`tag tag-${a.type}`}>{TYPE_LABELS[a.type]}</span></td>
-                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                  <td style={{textAlign:'right', fontVariantNumeric:'tabular-nums'}}>
                     {isDebitNormal ? a.balance.toLocaleString() : '—'}
                   </td>
-                  <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>
+                  <td style={{textAlign:'right', fontVariantNumeric:'tabular-nums'}}>
                     {!isDebitNormal ? a.balance.toLocaleString() : '—'}
                   </td>
                 </tr>
@@ -63,8 +59,8 @@ export default function TrialBalancePage() {
           <tfoot>
             <tr style={{fontWeight:500, background:'#fafaf7'}}>
               <td colSpan={3} style={{padding:'7px 8px', borderTop:'0.5px solid #e8e5dc'}}>合計</td>
-              <td style={{textAlign:'right',padding:'7px 8px', borderTop:'0.5px solid #e8e5dc'}}>{totalDebit.toLocaleString()}</td>
-              <td style={{textAlign:'right',padding:'7px 8px', borderTop:'0.5px solid #e8e5dc'}}>{totalCredit.toLocaleString()}</td>
+              <td style={{textAlign:'right', padding:'7px 8px', borderTop:'0.5px solid #e8e5dc'}}>{totalDebit.toLocaleString()}</td>
+              <td style={{textAlign:'right', padding:'7px 8px', borderTop:'0.5px solid #e8e5dc'}}>{totalCredit.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
