@@ -8,7 +8,7 @@ stateRouter.get('/', async (_req, res, next) => {
   try {
     const [accountRows]    = await pool.query('SELECT * FROM accounts ORDER BY code')
     const [partnerRows]    = await pool.query('SELECT * FROM partners ORDER BY code')
-    const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date, id')
+    const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
     const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date DESC')
     res.json({
       accounts:    (accountRows    as Parameters<typeof mapAccount>[0][]).map(mapAccount),

@@ -38,7 +38,7 @@ async function validateJournal(journal: Omit<Journal, 'id'> | Journal) {
 
 async function readJournalState() {
   const [accountRows] = await pool.query('SELECT * FROM accounts ORDER BY code')
-  const [journalRows] = await pool.query('SELECT * FROM journals ORDER BY date, id')
+  const [journalRows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
   return {
     accounts: (accountRows as Parameters<typeof mapAccount>[0][]).map(mapAccount),
     journals: (journalRows as Parameters<typeof mapJournal>[0][]).map(mapJournal)
@@ -52,7 +52,7 @@ async function applyDelta(conn: any, j: Pick<Journal,'debit'|'credit'|'amount'>,
 
 journalsRouter.get('/', async (_req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM journals ORDER BY date, id')
+    const [rows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
     res.json((rows as Parameters<typeof mapJournal>[0][]).map(mapJournal))
   } catch (e) { next(e) }
 })

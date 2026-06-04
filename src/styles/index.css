@@ -17,7 +17,7 @@ body {
 #root {
   display: flex;
   width: 100%;
-
+  max-width: 1280px;
   min-height: 100vh;
 }
 
@@ -386,3 +386,12 @@ button.template-btn {
 .tax-taxable8    { background: #EAF3DE; color: #27500A; }
 .tax-exempt      { background: #FAECE7; color: #993C1D; }
 .tax-non_taxable { background: #f5f4f0; color: #aaa; }
+
+/* ── 科目バッジ（仕訳一覧） ── */
+.account-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
