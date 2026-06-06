@@ -10,6 +10,7 @@ import FiscalYears from './components/FiscalYears'
 import Settings from './components/Settings'
 import Invoices from './components/Invoices'
 import BankImport from './components/BankImport'
+import MonthlyReport from './components/MonthlyReport'
 
 export default function App() {
   const { currentPage, loading, error } = useApp()
@@ -22,7 +23,8 @@ export default function App() {
         {currentPage === 'journal'       && <Journal />}
         {currentPage === 'trial-balance' && <TrialBalance />}
         {currentPage === 'invoices'      && <Invoices />}
-        {currentPage === 'bank-import'   && <BankImport />}
+        {currentPage === 'bank-import'    && <BankImport />}
+        {currentPage === 'monthly-report' && <MonthlyReport />}
         {currentPage === 'accounts'      && <Accounts />}
         {currentPage === 'partners'      && <Partners />}
         {currentPage === 'bs'            && <BS />}
