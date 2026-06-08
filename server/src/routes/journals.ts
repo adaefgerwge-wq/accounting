@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { mapAccount, mapJournal, mapJournalLine } from '../mappers.js'
-import type { Journal, JournalLine } from '../types.js'
-import { planTax, calcTax } from '../tax.js'
+import { mapAccount, mapJournal } from '../mappers.js'
+import type { Journal } from '../types.js'
+import { planTax } from '../tax.js'
 import { balanceSign } from '../balance.js'
 
 export const journalsRouter = Router()
@@ -12,180 +12,147 @@ async function getTaxMethod(): Promise<'inclusive' | 'exclusive'> {
   return rows[0]?.value === 'exclusive' ? 'exclusive' : 'inclusive'
 }
 
-// journal_lines 全件を取得して Journal[] に組み立てる
-async function fetchJournals(conn?: any): Promise<Journal[]> {
-  const q = conn ?? pool
-  const [jRows] = await q.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
-  if (!jRows.length) return []
-  const ids = jRows.map((r: any) => r.id)
-  const [lRows] = await q.query('SELECT * FROM journal_lines WHERE journal_id IN (?) ORDER BY id', [ids]) as any
-  const linesByJournal = new Map<number, JournalLine[]>()
-  for (const r of lRows) {
-    const l = mapJournalLine(r)
-    if (!linesByJournal.has(l.journalId)) linesByJournal.set(l.journalId, [])
-    linesByJournal.get(l.journalId)!.push(l)
-  }
-  return jRows.map((r: any) => mapJournal(r, linesByJournal.get(r.id) ?? []))
-}
-
-async function readState(conn?: any) {
-  const q = conn ?? pool
-  const [accountRows] = await q.query('SELECT * FROM accounts ORDER BY code') as any
-  return {
-    accounts: accountRows.map(mapAccount),
-    journals: await fetchJournals(conn),
-  }
-}
-
-// 税抜モード：課税行を税抜金額に分割し、消費税行を追加して返す
-async function splitTaxLines(lines: Omit<JournalLine,'id'|'journalId'>[], conn: any): Promise<Omit<JournalLine,'id'|'journalId'>[]> {
-  const result: Omit<JournalLine,'id'|'journalId'>[] = []
-  for (const line of lines) {
-    const { taxAmount } = calcTax(line.amount, line.taxType)
-    if (!taxAmount) { result.push(line); continue }
-
-    const [accRows] = await conn.query('SELECT type FROM accounts WHERE code = ?', [line.accountCode]) as any
-    const accType = accRows[0]?.type as string | undefined
-    const plan = planTax(
-      line.side === 'debit'  ? line.accountCode : '__other__',
-      line.side === 'credit' ? line.accountCode : '__other__',
-      line.side === 'debit'  ? accType : undefined,
-      line.side === 'credit' ? accType : undefined,
-      line.taxType, line.amount
-    )
-    if (!plan) { result.push(line); continue }
-
-    // 課税行を税抜金額に補正
-    result.push({ ...line, amount: line.amount - taxAmount })
-    // 消費税行を追加（仮受 or 仮払）
-    result.push({
-      side: line.side,
-      accountCode: plan.taxCode,
-      partnerCode: '',
-      amount: taxAmount,
-      taxType: 'none',
-    })
-  }
-  return result
-}
-
-// 残高に lines の増減を適用（sign=1で加算、-1で逆算）
-async function applyLines(conn: any, lines: Pick<JournalLine, 'side'|'accountCode'|'amount'>[], sign: 1|-1) {
-  const codes = [...new Set(lines.map(l => l.accountCode))]
-  const [rows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?)', [codes]) as any
-  const typeOf = new Map<string, string>(rows.map((r: any) => [r.code, r.type]))
-  for (const l of lines) {
-    const delta = l.amount * sign * balanceSign(typeOf.get(l.accountCode), l.side)
-    await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [delta, l.accountCode])
-  }
-}
-
-async function validateJournalInput(body: any, fiscalYearId: number, date: string, memo: string, lines: any[]) {
+async function validateJournal(journal: Omit<Journal, 'id'> | Journal) {
   const errors: string[] = []
-  if (!date) errors.push('日付を入力してください')
-  if (!lines || lines.length < 2) errors.push('明細行は2行以上必要です')
+  if (!journal.date) errors.push('日付を入力してください')
+  if (!journal.amount || journal.amount <= 0) errors.push('正の金額を入力してください')
+  if (journal.amount > 999999999) errors.push('金額が大きすぎます（上限: 999,999,999円）')
+  if (!journal.debit || !journal.credit) errors.push('借方科目と貸方科目を選択してください')
+  if (journal.debit && journal.credit && journal.debit === journal.credit) errors.push('借方と貸方に同じ科目は使えません')
 
-  const debitTotal  = lines.filter((l: any) => l.side === 'debit') .reduce((s: number, l: any) => s + (l.amount||0), 0)
-  const creditTotal = lines.filter((l: any) => l.side === 'credit').reduce((s: number, l: any) => s + (l.amount||0), 0)
-  if (debitTotal !== creditTotal) errors.push(`借方合計(${debitTotal.toLocaleString()})と貸方合計(${creditTotal.toLocaleString()})が一致しません`)
-  if (lines.some((l: any) => !l.amount || l.amount <= 0)) errors.push('金額は正の数を入力してください')
-  if (lines.some((l: any) => !l.accountCode)) errors.push('すべての行に科目を指定してください')
+  const [rows] = await pool.query('SELECT code, name, has_sub, type FROM accounts WHERE code IN (?, ?)', [journal.debit, journal.credit])
+  const accs = rows as Array<{ code: string; name: string; has_sub: 0|1|boolean; type: string }>
+  const debit  = accs.find(a => a.code === journal.debit)
+  const credit = accs.find(a => a.code === journal.credit)
+  if (!debit)  errors.push('借方科目が見つかりません')
+  if (!credit) errors.push('貸方科目が見つかりません')
+  if (debit?.has_sub  && !journal.debitPartner)  errors.push(`${debit.name}の取引先を選択してください`)
+  if (credit?.has_sub && !journal.creditPartner) errors.push(`${credit.name}の取引先を選択してください`)
 
-  const codes = [...new Set(lines.map((l: any) => l.accountCode as string))]
-  const [accRows] = await pool.query('SELECT code, name, has_sub FROM accounts WHERE code IN (?)', [codes]) as any
-  const accMap = new Map<string, any>(accRows.map((a: any) => [a.code, a]))
-  for (const l of lines) {
-    if (!accMap.has(l.accountCode)) { errors.push(`科目コード ${l.accountCode} が見つかりません`); continue }
-    const acc = accMap.get(l.accountCode)!
-    if (acc.has_sub && !l.partnerCode) errors.push(`${acc.name}の取引先を指定してください`)
-  }
-
-  if (fiscalYearId) {
-    const [fyRows] = await pool.query('SELECT start_date, end_date, closed FROM fiscal_years WHERE id = ?', [fiscalYearId]) as any
+  if (journal.fiscalYearId) {
+    const [fyRows] = await pool.query('SELECT start_date, end_date, closed FROM fiscal_years WHERE id = ?', [journal.fiscalYearId]) as any
     if (fyRows.length) {
       const fy = fyRows[0]
       if (fy.closed) errors.push('この会計年度は締め済みです')
-      if (date < String(fy.start_date).slice(0,10) || date > String(fy.end_date).slice(0,10))
+      if (journal.date < String(fy.start_date).slice(0,10) || journal.date > String(fy.end_date).slice(0,10)) {
         errors.push('日付が会計年度の範囲外です')
+      }
     }
   }
   return errors
 }
 
+async function readJournalState() {
+  const [accountRows] = await pool.query('SELECT * FROM accounts ORDER BY code')
+  const [journalRows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
+  return {
+    accounts: (accountRows as Parameters<typeof mapAccount>[0][]).map(mapAccount),
+    journals: (journalRows as Parameters<typeof mapJournal>[0][]).map(mapJournal)
+  }
+}
+
+async function applyDelta(conn: any, j: Pick<Journal,'debit'|'credit'|'amount'>, sign: 1|-1) {
+  const [rows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?, ?)', [j.debit, j.credit]) as any
+  const typeOf = (code: string) => rows.find((r: any) => r.code === code)?.type
+  const dDelta = j.amount * sign * balanceSign(typeOf(j.debit),  'debit')
+  const cDelta = j.amount * sign * balanceSign(typeOf(j.credit), 'credit')
+  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [dDelta, j.debit])
+  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [cDelta, j.credit])
+}
+
+// 税抜経理：課税科目を税込→税抜に補正し、消費税分を仮受/仮払消費税へ振り替える。
+// 表示用の消費税仕訳（売上高 ／ 仮受消費税、または 仮払消費税 ／ 仕入高 等）を1本生成する。
+// 相手勘定（普通預金・買掛金等の対象外科目）の金額には手を付けない。
+async function applyTaxExclusive(conn: any, journal: Omit<Journal,'id'>, sign: 1|-1) {
+  const { taxType, amount, date, fiscalYearId, memo, debit, credit } = journal
+  const [dRows] = await conn.query('SELECT type FROM accounts WHERE code = ?', [debit]) as any
+  const [cRows] = await conn.query('SELECT type FROM accounts WHERE code = ?', [credit]) as any
+  const plan = planTax(debit, credit, dRows[0]?.type, cRows[0]?.type, taxType, amount)
+  if (!plan) return
+
+  const diff = plan.taxAmount * sign
+  await conn.query('UPDATE accounts SET balance = balance - ? WHERE code = ?', [diff, plan.baseCode])
+  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [diff, plan.taxCode])
+
+  if (sign === 1) {
+    await conn.query(
+      'INSERT INTO journals (fiscal_year_id, date, debit, debit_partner, credit, credit_partner, amount, tax_type, memo) VALUES (?,?,?,?,?,?,?,?,?)',
+      [fiscalYearId ?? 1, date, plan.taxDebit, '', plan.taxCredit, '', plan.taxAmount, 'none', `消費税: ${memo}`]
+    )
+  } else {
+    // 取消・更新時は対応する消費税仕訳を1本削除
+    await conn.query(
+      'DELETE FROM journals WHERE memo = ? AND debit = ? AND credit = ? AND amount = ? LIMIT 1',
+      [`消費税: ${memo}`, plan.taxDebit, plan.taxCredit, plan.taxAmount]
+    )
+  }
+}
+
 journalsRouter.get('/', async (_req, res, next) => {
-  try { res.json(await fetchJournals()) } catch (e) { next(e) }
+  try {
+    const [rows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
+    res.json((rows as Parameters<typeof mapJournal>[0][]).map(mapJournal))
+  } catch (e) { next(e) }
 })
 
 journalsRouter.post('/', async (req, res, next) => {
-  const { fiscalYearId, date, memo, lines } = req.body
+  const journal = req.body as Omit<Journal, 'id'>
   const conn = await pool.getConnection()
   try {
-    const errors = await validateJournalInput(req.body, fiscalYearId, date, memo, lines)
+    const errors = await validateJournal(journal)
     if (errors.length) { res.status(400).json({ message: errors.join('\n') }); return }
-
     const taxMethod = await getTaxMethod()
     await conn.beginTransaction()
-
-    const [result] = await conn.query(
-      'INSERT INTO journals (fiscal_year_id, date, memo) VALUES (?,?,?)',
-      [fiscalYearId ?? 1, date, memo ?? '']
-    ) as any
-    const journalId = result.insertId
-
-    const finalLines = taxMethod === 'exclusive' ? await splitTaxLines(lines, conn) : lines
-    if (finalLines.length) {
-      await conn.query(
-        'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
-        [finalLines.map((l: any) => [journalId, l.side, l.accountCode, l.partnerCode ?? '', l.amount, l.taxType ?? 'none'])]
-      )
-    }
-    await applyLines(conn, finalLines, 1)
+    await applyDelta(conn, journal, 1)
+    await conn.query(
+      'INSERT INTO journals (fiscal_year_id, date, debit, debit_partner, credit, credit_partner, amount, tax_type, memo) VALUES (?,?,?,?,?,?,?,?,?)',
+      [journal.fiscalYearId ?? 1, journal.date, journal.debit, journal.debitPartner, journal.credit, journal.creditPartner, journal.amount, journal.taxType ?? 'none', journal.memo]
+    )
+    if (taxMethod === 'exclusive') await applyTaxExclusive(conn, journal, 1)
     await conn.commit()
-    res.status(201).json(await readState())
+    res.status(201).json(await readJournalState())
   } catch (e) { await conn.rollback(); next(e) } finally { conn.release() }
 })
 
 journalsRouter.put('/:id', async (req, res, next) => {
-  const { fiscalYearId, date, memo, lines } = req.body
+  const journal = req.body as Journal
   const conn = await pool.getConnection()
   try {
-    const errors = await validateJournalInput(req.body, fiscalYearId, date, memo, lines)
+    const errors = await validateJournal(journal)
     if (errors.length) { res.status(400).json({ message: errors.join('\n') }); return }
-
     const taxMethod = await getTaxMethod()
     await conn.beginTransaction()
-
-    // 旧 lines を取得して残高を逆算
-    const [oldLineRows] = await conn.query('SELECT * FROM journal_lines WHERE journal_id = ?', [req.params.id]) as any
-    const oldLines = oldLineRows.map(mapJournalLine)
-    await applyLines(conn, oldLines, -1)
-
-    // ヘッダー更新 + 旧 lines 削除（CASCADE で消える）+ 新 lines 挿入
-    await conn.query('UPDATE journals SET fiscal_year_id=?, date=?, memo=? WHERE id=?',
-      [fiscalYearId ?? 1, date, memo ?? '', req.params.id])
-    await conn.query('DELETE FROM journal_lines WHERE journal_id = ?', [req.params.id])
-
-    const finalLines = taxMethod === 'exclusive' ? await splitTaxLines(lines, conn) : lines
-    if (finalLines.length) {
-      await conn.query(
-        'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
-        [finalLines.map((l: any) => [req.params.id, l.side, l.accountCode, l.partnerCode ?? '', l.amount, l.taxType ?? 'none'])]
-      )
-    }
-    await applyLines(conn, finalLines, 1)
+    const [rows] = await conn.query('SELECT * FROM journals WHERE id = ? FOR UPDATE', [req.params.id])
+    const [old] = (rows as Parameters<typeof mapJournal>[0][])
+    if (!old) { await conn.rollback(); res.status(404).json({ message: '仕訳が見つかりません' }); return }
+    const oldJournal = mapJournal(old)
+    await applyDelta(conn, oldJournal, -1)
+    if (taxMethod === 'exclusive') await applyTaxExclusive(conn, oldJournal, -1)
+    await applyDelta(conn, journal, 1)
+    await conn.query(
+      'UPDATE journals SET fiscal_year_id=?, date=?, debit=?, debit_partner=?, credit=?, credit_partner=?, amount=?, tax_type=?, memo=? WHERE id=?',
+      [journal.fiscalYearId ?? 1, journal.date, journal.debit, journal.debitPartner, journal.credit, journal.creditPartner, journal.amount, journal.taxType ?? 'none', journal.memo, req.params.id]
+    )
+    if (taxMethod === 'exclusive') await applyTaxExclusive(conn, journal, 1)
     await conn.commit()
-    res.json(await readState())
+    res.json(await readJournalState())
   } catch (e) { await conn.rollback(); next(e) } finally { conn.release() }
 })
 
 journalsRouter.delete('/:id', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
+    const taxMethod = await getTaxMethod()
     await conn.beginTransaction()
-    const [lineRows] = await conn.query('SELECT * FROM journal_lines WHERE journal_id = ?', [req.params.id]) as any
-    await applyLines(conn, lineRows.map(mapJournalLine), -1)
-    await conn.query('DELETE FROM journals WHERE id = ?', [req.params.id]) // CASCADE で lines も削除
+    const [rows] = await conn.query('SELECT * FROM journals WHERE id = ? FOR UPDATE', [req.params.id])
+    const [j] = (rows as Parameters<typeof mapJournal>[0][])
+    if (j) {
+      const journal = mapJournal(j)
+      await applyDelta(conn, journal, -1)
+      if (taxMethod === 'exclusive') await applyTaxExclusive(conn, journal, -1)
+      await conn.query('DELETE FROM journals WHERE id = ?', [req.params.id])
+    }
     await conn.commit()
-    res.json(await readState())
+    res.json(await readJournalState())
   } catch (e) { await conn.rollback(); next(e) } finally { conn.release() }
 })

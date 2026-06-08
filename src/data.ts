@@ -25,32 +25,8 @@ export const initialPartners: Partner[] = [
 ]
 
 export const initialJournals: Journal[] = [
-  {
-    id: 1, fiscalYearId: 1, date: '2024-01-15', memo: '売上入金',
-    lines: [
-      { id: 1, journalId: 1, side: 'debit',  accountCode: '1020', partnerCode: '', amount: 500000, taxType: 'none' },
-      { id: 2, journalId: 1, side: 'credit', accountCode: '4010', partnerCode: '', amount: 500000, taxType: 'taxable10' },
-    ],
-  },
-  {
-    id: 2, fiscalYearId: 1, date: '2024-01-20', memo: '仕入計上',
-    lines: [
-      { id: 3, journalId: 2, side: 'debit',  accountCode: '5010', partnerCode: '',     amount: 300000, taxType: 'taxable10' },
-      { id: 4, journalId: 2, side: 'credit', accountCode: '2010', partnerCode: 'V001', amount: 300000, taxType: 'none' },
-    ],
-  },
-  {
-    id: 3, fiscalYearId: 1, date: '2024-01-25', memo: '給与支払',
-    lines: [
-      { id: 5, journalId: 3, side: 'debit',  accountCode: '5020', partnerCode: '', amount: 200000, taxType: 'none' },
-      { id: 6, journalId: 3, side: 'credit', accountCode: '1020', partnerCode: '', amount: 200000, taxType: 'none' },
-    ],
-  },
-  {
-    id: 4, fiscalYearId: 1, date: '2024-01-28', memo: '売上計上',
-    lines: [
-      { id: 7, journalId: 4, side: 'debit',  accountCode: '1100', partnerCode: 'C001', amount: 200000, taxType: 'none' },
-      { id: 8, journalId: 4, side: 'credit', accountCode: '4010', partnerCode: '',     amount: 200000, taxType: 'taxable10' },
-    ],
-  },
+  { id: 1, fiscalYearId: 1, date: '2024-01-15', debit: '1020', debitPartner: '',     credit: '4010', creditPartner: '',     amount: 500000, taxType: 'taxable10',  memo: '売上入金' },
+  { id: 2, fiscalYearId: 1, date: '2024-01-20', debit: '5010', debitPartner: '',     credit: '2010', creditPartner: 'V001', amount: 300000, taxType: 'taxable10',  memo: '仕入計上' },
+  { id: 3, fiscalYearId: 1, date: '2024-01-25', debit: '5020', debitPartner: '',     credit: '1020', creditPartner: '',     amount: 200000, taxType: 'non_taxable', memo: '給与支払' },
+  { id: 4, fiscalYearId: 1, date: '2024-01-28', debit: '1100', debitPartner: 'C001', credit: '4010', creditPartner: '',     amount: 200000, taxType: 'taxable10',  memo: '売上計上' },
 ]

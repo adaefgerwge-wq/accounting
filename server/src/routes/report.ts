@@ -7,34 +7,40 @@ export const reportRouter = Router()
 reportRouter.get('/monthly', async (req, res, next) => {
   try {
     const { fiscalYearId } = req.query
-    const cond = fiscalYearId ? 'AND j.fiscal_year_id = ?' : ''
+    const where = fiscalYearId ? 'WHERE j.fiscal_year_id = ?' : ''
     const params = fiscalYearId ? [fiscalYearId] : []
 
+    // 月ごとに借方・貸方の科目区分合計を集計
     const [rows] = await pool.query(`
       SELECT
         DATE_FORMAT(j.date, '%Y-%m') AS month,
         a.type                        AS account_type,
-        l.side,
-        SUM(l.amount)                 AS total
-      FROM journal_lines l
-      JOIN journals j  ON j.id = l.journal_id
-      JOIN accounts a  ON a.code = l.account_code
-      WHERE 1=1 ${cond}
-      GROUP BY month, a.type, l.side
+        SUM(CASE WHEN j.debit  = a.code THEN j.amount ELSE 0 END) AS debit_sum,
+        SUM(CASE WHEN j.credit = a.code THEN j.amount ELSE 0 END) AS credit_sum
+      FROM journals j
+      JOIN accounts a ON a.code IN (j.debit, j.credit)
+      ${where}
+      GROUP BY month, a.type
       ORDER BY month
     `, params) as any
 
-    const monthMap: Record<string, { revenue: number; expense: number }> = {}
+    // 月ごとに整理
+    const monthMap: Record<string, Record<string, number>> = {}
     for (const row of rows) {
       const m = row.month
-      if (!monthMap[m]) monthMap[m] = { revenue: 0, expense: 0 }
-      if (row.account_type === 'revenue' && row.side === 'credit') monthMap[m].revenue += Number(row.total)
-      if (row.account_type === 'expense' && row.side === 'debit')  monthMap[m].expense += Number(row.total)
+      if (!monthMap[m]) monthMap[m] = { revenue: 0, expense: 0, asset: 0, liability: 0, equity: 0 }
+      if (row.account_type === 'revenue') monthMap[m].revenue += Number(row.credit_sum)
+      if (row.account_type === 'expense') monthMap[m].expense += Number(row.debit_sum)
     }
 
-    res.json(Object.entries(monthMap).map(([month, v]) => ({
-      month, revenue: v.revenue, expense: v.expense, profit: v.revenue - v.expense,
-    })))
+    const result = Object.entries(monthMap).map(([month, v]) => ({
+      month,
+      revenue: v.revenue,
+      expense: v.expense,
+      profit:  v.revenue - v.expense,
+    }))
+
+    res.json(result)
   } catch (e) { next(e) }
 })
 
@@ -51,11 +57,10 @@ reportRouter.get('/monthly-accounts', async (req, res, next) => {
       SELECT
         DATE_FORMAT(j.date, '%Y-%m') AS month,
         a.code, a.name, a.type,
-        SUM(CASE WHEN l.side = 'debit'  THEN l.amount ELSE 0 END) AS debit_sum,
-        SUM(CASE WHEN l.side = 'credit' THEN l.amount ELSE 0 END) AS credit_sum
-      FROM journal_lines l
-      JOIN journals j ON j.id = l.journal_id
-      JOIN accounts a ON a.code = l.account_code
+        SUM(CASE WHEN j.debit  = a.code THEN j.amount ELSE 0 END) AS debit_sum,
+        SUM(CASE WHEN j.credit = a.code THEN j.amount ELSE 0 END) AS credit_sum
+      FROM journals j
+      JOIN accounts a ON a.code IN (j.debit, j.credit)
       WHERE ${conditions.join(' AND ')}
       GROUP BY month, a.code, a.name, a.type
       ORDER BY month, a.code

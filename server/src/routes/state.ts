@@ -1,33 +1,20 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { mapAccount, mapJournal, mapJournalLine, mapPartner, mapFiscalYear } from '../mappers.js'
+import { mapAccount, mapJournal, mapPartner, mapFiscalYear } from '../mappers.js'
 
 export const stateRouter = Router()
 
 stateRouter.get('/', async (_req, res, next) => {
   try {
-    const [accountRows]    = await pool.query('SELECT * FROM accounts ORDER BY code') as any
-    const [partnerRows]    = await pool.query('SELECT * FROM partners ORDER BY code') as any
-    const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
-    const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date DESC') as any
-
-    const journals = []
-    if (journalRows.length) {
-      const ids = journalRows.map((r: any) => r.id)
-      const [lineRows] = await pool.query('SELECT * FROM journal_lines WHERE journal_id IN (?) ORDER BY id', [ids]) as any
-      const linesByJournal = new Map<number, any[]>()
-      for (const r of lineRows) {
-        if (!linesByJournal.has(r.journal_id)) linesByJournal.set(r.journal_id, [])
-        linesByJournal.get(r.journal_id)!.push(mapJournalLine(r))
-      }
-      for (const r of journalRows) journals.push(mapJournal(r, linesByJournal.get(r.id) ?? []))
-    }
-
+    const [accountRows]    = await pool.query('SELECT * FROM accounts ORDER BY code')
+    const [partnerRows]    = await pool.query('SELECT * FROM partners ORDER BY code')
+    const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC')
+    const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date DESC')
     res.json({
-      accounts:    accountRows.map(mapAccount),
-      partners:    partnerRows.map(mapPartner),
-      journals,
-      fiscalYears: fiscalYearRows.map(mapFiscalYear),
+      accounts:    (accountRows    as Parameters<typeof mapAccount>[0][]).map(mapAccount),
+      partners:    (partnerRows    as Parameters<typeof mapPartner>[0][]).map(mapPartner),
+      journals:    (journalRows    as Parameters<typeof mapJournal>[0][]).map(mapJournal),
+      fiscalYears: (fiscalYearRows as Parameters<typeof mapFiscalYear>[0][]).map(mapFiscalYear),
     })
   } catch (e) { next(e) }
 })
