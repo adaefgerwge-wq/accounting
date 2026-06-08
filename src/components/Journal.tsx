@@ -58,7 +58,6 @@ export default function JournalPage() {
   const [open, setOpen]             = useState(false)
 
   const getAccount     = (code: string) => accounts.find(a => a.code === code)
-  const getAccountName = (code: string) => getAccount(code)?.name ?? code
   const getPartnerName = (code: string) => partners.find(p => p.code === code)?.name ?? ''
   const partnersFor    = (code: string) => {
     const a = getAccount(code); if (!a?.hasSub) return []
@@ -147,46 +146,71 @@ export default function JournalPage() {
       <div className="content" style={{ overflow: 'auto' }}>
         {alertMsg && <div className="alert alert-success">{alertMsg}</div>}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ minWidth: 800, whiteSpace: 'nowrap' }}>
+          <table style={{ minWidth: 900, whiteSpace: 'nowrap' }}>
             <thead>
               <tr>
-                <th>日付</th>
-                <th>記入側</th>
-                <th>科目</th>
-                <th>補助</th>
-                <th style={{ textAlign: 'right' }}>金額</th>
-                <th>消費税</th>
+                <th style={{ width: 90 }}>日付</th>
+                <th>借方科目</th>
+                <th style={{ textAlign: 'right', width: 100 }}>借方金額</th>
+                <th style={{ width: 80 }}>借方消費税</th>
+                <th style={{ width: 1, padding: 0 }} />
+                <th>貸方科目</th>
+                <th style={{ textAlign: 'right', width: 100 }}>貸方金額</th>
+                <th style={{ width: 80 }}>貸方消費税</th>
                 <th>摘要</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {filteredJournals.length === 0
-                ? <tr><td colSpan={8}><div className="empty-state"><i className="ti ti-notes-off" />仕訳がありません</div></td></tr>
-                : filteredJournals.map(j => j.lines.map((l, li) => {
-                  const acc = getAccount(l.accountCode)
-                  return (
-                    <tr key={`${j.id}-${li}`} style={{ borderTop: li === 0 ? '1.5px solid #e8e5dc' : undefined }}>
-                      {li === 0 && <td rowSpan={j.lines.length} style={{ color: '#888', verticalAlign: 'top', paddingTop: 8, borderRight: '0.5px solid #f0ede6' }}>{j.date}</td>}
-                      <td style={{ color: l.side === 'debit' ? '#3C3489' : '#993C1D', fontWeight: 500, fontSize: 12 }}>
-                        {l.side === 'debit' ? '借方' : '貸方'}
-                      </td>
-                      <td>
-                        {acc && <span className="account-badge" style={{ background: TYPE_BG[acc.type], color: TYPE_COLORS[acc.type] }}>{getAccountName(l.accountCode)}</span>}
-                      </td>
-                      <td>{l.partnerCode ? <span className="partner-chip"><i className="ti ti-building" style={{ fontSize: 10 }} />{getPartnerName(l.partnerCode)}</span> : <span style={{ color: '#ccc' }}>—</span>}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{l.amount.toLocaleString()}</td>
-                      <td><span className={`tax-tag tax-${l.taxType}`}>{TAX_LABELS[l.taxType]}</span></td>
-                      {li === 0 && <td rowSpan={j.lines.length} style={{ color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'top', paddingTop: 8 }}>{j.memo}</td>}
-                      {li === 0 && <td rowSpan={j.lines.length} style={{ verticalAlign: 'top', paddingTop: 4 }}>
-                        <div className="actions-cell">
-                          {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
-                          {!isClosed && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
-                        </div>
-                      </td>}
-                    </tr>
-                  )
-                }))}
+                ? <tr><td colSpan={10}><div className="empty-state"><i className="ti ti-notes-off" />仕訳がありません</div></td></tr>
+                : filteredJournals.map(j => {
+                  const debits  = j.lines.filter(l => l.side === 'debit')
+                  const credits = j.lines.filter(l => l.side === 'credit')
+                  const rows    = Math.max(debits.length, credits.length)
+                  return Array.from({ length: rows }).map((_, ri) => {
+                    const d = debits[ri]
+                    const c = credits[ri]
+                    const dAcc = d ? getAccount(d.accountCode) : null
+                    const cAcc = c ? getAccount(c.accountCode) : null
+                    return (
+                      <tr key={`${j.id}-${ri}`} style={{ borderTop: ri === 0 ? '1.5px solid #e8e5dc' : '0.5px solid #f5f3ee' }}>
+                        {ri === 0 && <td rowSpan={rows} style={{ color: '#888', verticalAlign: 'middle', borderRight: '0.5px solid #f0ede6' }}>{j.date}</td>}
+                        {/* 借方 */}
+                        <td style={{ background: '#f9f9fd' }}>
+                          {dAcc && <span className="account-badge" style={{ background: TYPE_BG[dAcc.type], color: TYPE_COLORS[dAcc.type] }}>{dAcc.name}</span>}
+                          {d?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}>{getPartnerName(d.partnerCode)}</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: '#f9f9fd' }}>
+                          {d ? d.amount.toLocaleString() : ''}
+                        </td>
+                        <td style={{ background: '#f9f9fd' }}>
+                          {d && <span className={`tax-tag tax-${d.taxType}`}>{TAX_LABELS[d.taxType]}</span>}
+                        </td>
+                        {/* 区切り */}
+                        <td style={{ padding: 0, borderLeft: '1.5px solid #e0ddd5' }} />
+                        {/* 貸方 */}
+                        <td style={{ background: '#fff8f7' }}>
+                          {cAcc && <span className="account-badge" style={{ background: TYPE_BG[cAcc.type], color: TYPE_COLORS[cAcc.type] }}>{cAcc.name}</span>}
+                          {c?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}>{getPartnerName(c.partnerCode)}</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: '#fff8f7' }}>
+                          {c ? c.amount.toLocaleString() : ''}
+                        </td>
+                        <td style={{ background: '#fff8f7' }}>
+                          {c && <span className={`tax-tag tax-${c.taxType}`}>{TAX_LABELS[c.taxType]}</span>}
+                        </td>
+                        {ri === 0 && <td rowSpan={rows} style={{ color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'middle' }}>{j.memo}</td>}
+                        {ri === 0 && <td rowSpan={rows} style={{ verticalAlign: 'middle' }}>
+                          <div className="actions-cell">
+                            {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
+                            {!isClosed && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
+                          </div>
+                        </td>}
+                      </tr>
+                    )
+                  })
+                })}
             </tbody>
           </table>
         </div>
