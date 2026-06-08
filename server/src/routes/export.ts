@@ -125,41 +125,33 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
       a.closingSigned += delta
     }
 
-    // 符号付き残高を借方列・貸方列に振り分け
-    const splitBalance = (signed: number, normalDebit: boolean): [number, number] => {
-      if (normalDebit) return signed >= 0 ? [signed, 0] : [0, -signed]
-      return signed >= 0 ? [0, signed] : [-signed, 0]
-    }
-
     const esc = (v: any) => `"${String(v).replace(/"/g, '""')}"`
-    const header = ['コード','科目名','区分','期首借方','期首貸方','期中借方','期中貸方','期末借方','期末貸方']
+    // 期首・期末は「正常残高側を正」の符号付き残高を1列にまとめて出力
+    const header = ['コード','科目名','区分','期首残高','期中借方','期中貸方','期末残高']
     const out: string[] = []
     out.push(`"期間: ${periodLabel}"`)
     out.push(header.join(','))
 
     // 総合計
-    const grand = { ob:0, oc:0, pd:0, pc:0, cb:0, cc:0 }
+    const grand = { open:0, pd:0, pc:0, close:0 }
 
     for (const type of TYPE_ORDER) {
       const inType = accounts.filter((a: any) => a.type === type)
       if (!inType.length) continue
-      const sub = { ob:0, oc:0, pd:0, pc:0, cb:0, cc:0 }
-      const normalDebit = type === 'asset' || type === 'expense'
+      const sub = { open:0, pd:0, pc:0, close:0 }
 
       for (const a of inType) {
         const ag = agg.get(a.code)!
-        const [ob, oc] = splitBalance(ag.openingSigned, normalDebit)
-        const [cb, cc] = splitBalance(ag.closingSigned, normalDebit)
-        out.push([a.code, a.name, TYPE_LABELS[type], ob, oc, ag.periodDebit, ag.periodCredit, cb, cc].map(esc).join(','))
-        sub.ob += ob; sub.oc += oc; sub.pd += ag.periodDebit; sub.pc += ag.periodCredit; sub.cb += cb; sub.cc += cc
+        out.push([a.code, a.name, TYPE_LABELS[type], ag.openingSigned, ag.periodDebit, ag.periodCredit, ag.closingSigned].map(esc).join(','))
+        sub.open += ag.openingSigned; sub.pd += ag.periodDebit; sub.pc += ag.periodCredit; sub.close += ag.closingSigned
       }
       // カテゴリ合計行
-      out.push(['', `【${TYPE_LABELS[type]} 合計】`, '', sub.ob, sub.oc, sub.pd, sub.pc, sub.cb, sub.cc].map(esc).join(','))
-      grand.ob += sub.ob; grand.oc += sub.oc; grand.pd += sub.pd; grand.pc += sub.pc; grand.cb += sub.cb; grand.cc += sub.cc
+      out.push(['', `【${TYPE_LABELS[type]} 合計】`, '', sub.open, sub.pd, sub.pc, sub.close].map(esc).join(','))
+      grand.open += sub.open; grand.pd += sub.pd; grand.pc += sub.pc; grand.close += sub.close
     }
 
     // 総合計行
-    out.push(['', '《総合計》', '', grand.ob, grand.oc, grand.pd, grand.pc, grand.cb, grand.cc].map(esc).join(','))
+    out.push(['', '《総合計》', '', grand.open, grand.pd, grand.pc, grand.close].map(esc).join(','))
 
     const bom = '﻿'
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
