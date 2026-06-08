@@ -42,7 +42,7 @@ export const api = {
   deleteFiscalYear: (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}`,         { method:'DELETE' }),
 
   exportJournalsCsv:     (fiscalYearId?: number) => `${BASE}/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
-  exportTrialBalanceCsv: () => `${BASE}/export/trial-balance.csv`,
+  exportTrialBalanceCsv: (fiscalYearId?: number) => `${BASE}/export/trial-balance.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
   exportBackup:          () => `${BASE}/export/backup.json`,
 
   restore: (data: unknown) => request<{ message: string }>('/restore', { method:'POST', body: JSON.stringify(data) }),

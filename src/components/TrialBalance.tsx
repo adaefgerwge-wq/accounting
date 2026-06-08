@@ -5,7 +5,7 @@ const TYPE_LABELS = { asset:'資産', liability:'負債', equity:'純資産', re
 const TYPE_ORDER  = ['asset','liability','equity','revenue','expense'] as const
 
 export default function TrialBalancePage() {
-  const { accounts } = useApp()
+  const { accounts, currentFiscalYearId } = useApp()
 
   const sorted = [...accounts].sort((a, b) => {
     const oi = TYPE_ORDER.indexOf(a.type as typeof TYPE_ORDER[number])
@@ -21,7 +21,7 @@ export default function TrialBalancePage() {
     <div className="page" style={{ display:'flex', flexDirection:'column', height:'100%' }}>
       <div className="toolbar">
         <h2><i className="ti ti-table" />試算表</h2>
-        <a href={api.exportTrialBalanceCsv()} download>
+        <a href={api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined)} download>
           <button><i className="ti ti-download" /> CSV出力</button>
         </a>
       </div>

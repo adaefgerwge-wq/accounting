@@ -149,7 +149,7 @@ export default function SettingsPage() {
                 <div style={{fontWeight:500, fontSize:13}}>試算表 CSV</div>
                 <div style={{fontSize:12, color:'#888'}}>勘定科目の残高一覧を出力</div>
               </div>
-              <a href={api.exportTrialBalanceCsv()} download>
+              <a href={api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined)} download>
                 <button><i className="ti ti-file-spreadsheet" /> ダウンロード</button>
               </a>
             </div>
