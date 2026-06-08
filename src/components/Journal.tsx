@@ -224,11 +224,11 @@ export default function JournalPage() {
             <table style={{ width: '100%', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf7' }}>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 56 }}>記入側</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left' }}>科目</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 110 }}>補助</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 60 }}>記入側</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', minWidth: 140 }}>科目</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 100 }}>補助</th>
                   <th style={{ padding: '6px 8px', textAlign: 'right', width: 110 }}>金額</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 90 }}>消費税</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 110 }}>消費税</th>
                   <th style={{ width: 28 }} />
                 </tr>
               </thead>
