@@ -27,17 +27,22 @@ export interface Partner {
   accountCode: string
 }
 
+export interface JournalLine {
+  id: number
+  journalId: number
+  side: 'debit' | 'credit'
+  accountCode: string
+  partnerCode: string
+  amount: number
+  taxType: TaxType
+}
+
 export interface Journal {
   id: number
   fiscalYearId: number
   date: string
-  debit: string
-  debitPartner: string
-  credit: string
-  creditPartner: string
-  amount: number
-  taxType: TaxType
   memo: string
+  lines: JournalLine[]
 }
 
 export const TAX_LABELS: Record<TaxType, string> = {

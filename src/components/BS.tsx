@@ -23,9 +23,9 @@ function Section({ title, items, total, journals, partners }: {
               <span>{a.balance.toLocaleString()}</span>
             </div>
             {subs.map(p => {
-              const bal = journals
-                .filter(j => (j.debit === a.code && j.debitPartner === p.code) || (j.credit === a.code && j.creditPartner === p.code))
-                .reduce((s, j) => s + j.amount, 0)
+              const bal = journals.flatMap(j => j.lines)
+                .filter(l => l.accountCode === a.code && l.partnerCode === p.code)
+                .reduce((s, l) => s + l.amount, 0)
               return (
                 <div key={p.code} className="fs-row indent">
                   <span>└ {p.name}</span>

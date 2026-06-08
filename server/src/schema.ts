@@ -46,58 +46,93 @@ export async function ensureSchema() {
     )
   `)
 
+  // journals テーブル（ヘッダーのみ：日付・摘要）
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journals (
-      id              INT AUTO_INCREMENT PRIMARY KEY,
-      fiscal_year_id  INT          NOT NULL DEFAULT 1,
-      date            DATE         NOT NULL,
-      debit           VARCHAR(20)  NOT NULL,
-      debit_partner   VARCHAR(20)  NOT NULL DEFAULT '',
-      credit          VARCHAR(20)  NOT NULL,
-      credit_partner  VARCHAR(20)  NOT NULL DEFAULT '',
-      amount          INT          NOT NULL,
-      tax_type        ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none',
-      memo            VARCHAR(255) NOT NULL DEFAULT '',
-      created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      id             INT AUTO_INCREMENT PRIMARY KEY,
+      fiscal_year_id INT          NOT NULL DEFAULT 1,
+      date           DATE         NOT NULL,
+      memo           VARCHAR(255) NOT NULL DEFAULT '',
+      created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_journals_date (date),
       INDEX idx_journals_fiscal_year (fiscal_year_id),
-      INDEX idx_journals_debit (debit),
-      INDEX idx_journals_credit (credit),
       FOREIGN KEY (fiscal_year_id) REFERENCES fiscal_years(id)
     )
   `)
 
-  // fiscal_year_id カラムが無ければ追加（既存DB向けマイグレーション）
+  // journal_lines テーブル（借方・貸方の各行）
   await pool.query(`
-    ALTER TABLE journals
-    ADD COLUMN IF NOT EXISTS fiscal_year_id INT NOT NULL DEFAULT 1 AFTER id
-  `).catch(() => {})
+    CREATE TABLE IF NOT EXISTS journal_lines (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      journal_id   INT          NOT NULL,
+      side         ENUM('debit','credit') NOT NULL,
+      account_code VARCHAR(20)  NOT NULL,
+      partner_code VARCHAR(20)  NOT NULL DEFAULT '',
+      amount       INT          NOT NULL,
+      tax_type     ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none',
+      INDEX idx_journal_lines_journal (journal_id),
+      FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE CASCADE
+    )
+  `)
 
-  // tax_type カラムが無ければ追加
-  await pool.query(`
-    ALTER TABLE journals
-    ADD COLUMN IF NOT EXISTS tax_type ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none' AFTER amount
-  `).catch(() => {})
-
-  // default_tax_type カラムが無ければ追加（科目ごとのデフォルト消費税区分）
+  // 既存カラムのマイグレーション
   await pool.query(`
     ALTER TABLE accounts
     ADD COLUMN IF NOT EXISTS default_tax_type ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none' AFTER has_sub
   `).catch(() => {})
 
   await backfillTaxDefaults()
+  await migrateToJournalLines()
 }
 
-// 既存DB向け：消費税勘定の補完と、科目デフォルト税区分の初期設定（一度きり）
+// 既存DB向け：journals の旧1行形式（debit/credit/amount カラム）を journal_lines へ移行
+async function migrateToJournalLines() {
+  // debit カラムが journals に残っているか確認
+  const [cols] = await pool.query(
+    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'journals' AND COLUMN_NAME = 'debit'"
+  ) as any
+  if (!cols.length) return // 既に移行済み
+
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+
+    // 既存仕訳を journal_lines に変換（借方行）
+    await conn.query(`
+      INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type)
+      SELECT id, 'debit', debit, IFNULL(debit_partner,''), amount, tax_type FROM journals WHERE debit IS NOT NULL AND debit != ''
+    `)
+    // 貸方行（tax_type は対象外として格納、課税側は借方または貸方の課税科目に付く）
+    await conn.query(`
+      INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type)
+      SELECT id, 'credit', credit, IFNULL(credit_partner,''), amount,
+        CASE WHEN credit IN (SELECT code FROM accounts WHERE type = 'revenue') THEN tax_type ELSE 'none' END
+      FROM journals WHERE credit IS NOT NULL AND credit != ''
+    `)
+
+    // journals から不要カラムを削除（IF EXISTS 非対応のMySQLに対応）
+    for (const col of ['debit','debit_partner','credit','credit_partner','amount','tax_type']) {
+      await conn.query(`ALTER TABLE journals DROP COLUMN \`${col}\``).catch(() => {})
+    }
+
+    await conn.commit()
+    console.log('journals → journal_lines 移行完了')
+  } catch (e) {
+    await conn.rollback()
+    throw e
+  } finally {
+    conn.release()
+  }
+}
+
+// 科目デフォルト税区分の初期設定（一度きり）
 async function backfillTaxDefaults() {
-  // 仮払消費税・仮受消費税が無ければ追加
   await pool.query(
     "INSERT IGNORE INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES " +
     "('1150','仮払消費税','asset',0,false,'none'),('2050','仮受消費税','liability',0,false,'none')"
   ).catch(() => {})
 
-  // デフォルト税区分の初期値は一度だけ流し込む（ユーザーの変更を上書きしない）
   const [rows] = await pool.query("SELECT value FROM settings WHERE key_name = 'tax_defaults_seeded'") as any
   if (rows.length) return
   await pool.query("UPDATE accounts SET default_tax_type = 'taxable10' WHERE code IN ('1500','4010','5010','5030')")
@@ -115,13 +150,11 @@ export async function seedIfEmpty() {
   try {
     await connection.beginTransaction()
 
-    // デフォルト会計年度
     const currentYear = new Date().getFullYear()
     await connection.query(
       'INSERT INTO fiscal_years (id, name, start_date, end_date) VALUES (1, ?, ?, ?)',
       [`${currentYear}年度`, `${currentYear}-01-01`, `${currentYear}-12-31`]
     )
-
     await connection.query(
       'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
       [initialAccounts.map(a => [a.code, a.name, a.type, a.balance, a.hasSub, a.defaultTaxType ?? 'none'])]
@@ -130,10 +163,17 @@ export async function seedIfEmpty() {
       'INSERT INTO partners (code, name, type, account_code) VALUES ?',
       [initialPartners.map(p => [p.code, p.name, p.type, p.accountCode])]
     )
-    await connection.query(
-      'INSERT INTO journals (id, fiscal_year_id, date, debit, debit_partner, credit, credit_partner, amount, tax_type, memo) VALUES ?',
-      [initialJournals.map(j => [j.id, 1, j.date, j.debit, j.debitPartner, j.credit, j.creditPartner, j.amount, j.taxType ?? 'none', j.memo])]
-    )
+    for (const j of initialJournals) {
+      const [result] = await connection.query(
+        'INSERT INTO journals (id, fiscal_year_id, date, memo) VALUES (?,?,?,?)',
+        [j.id, 1, j.date, j.memo]
+      ) as any
+      const journalId = result.insertId
+      await connection.query(
+        'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
+        [j.lines.map(l => [journalId, l.side, l.accountCode, l.partnerCode, l.amount, l.taxType])]
+      )
+    }
 
     await connection.commit()
   } catch (error) {

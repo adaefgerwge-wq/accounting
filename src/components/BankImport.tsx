@@ -58,7 +58,11 @@ export default function BankImportPage() {
     if (!confirm(`${selected.length}件の仕訳を登録しますか？`)) return
     setImporting(true)
     for (const r of selected) {
-      await addJournal({ fiscalYearId: r.fiscalYearId, date: r.date, debit: r.debitCode, debitPartner: '', credit: r.creditCode, creditPartner: '', amount: Math.abs(r.amount), taxType: 'none', memo: r.memo })
+      const amt = Math.abs(r.amount)
+      await addJournal({ fiscalYearId: r.fiscalYearId, date: r.date, memo: r.memo, lines: [
+        { id: 0, journalId: 0, side: 'debit',  accountCode: r.debitCode,  partnerCode: '', amount: amt, taxType: 'none' },
+        { id: 0, journalId: 0, side: 'credit', accountCode: r.creditCode, partnerCode: '', amount: amt, taxType: 'none' },
+      ]})
     }
     setImporting(false)
     setRows([])
