@@ -3,6 +3,7 @@ import { pool } from '../db.js'
 import { mapAccount, mapJournal } from '../mappers.js'
 import type { Journal } from '../types.js'
 import { planTax } from '../tax.js'
+import { balanceSign } from '../balance.js'
 
 export const journalsRouter = Router()
 
@@ -51,8 +52,12 @@ async function readJournalState() {
 }
 
 async function applyDelta(conn: any, j: Pick<Journal,'debit'|'credit'|'amount'>, sign: 1|-1) {
-  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * sign, j.debit])
-  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * sign, j.credit])
+  const [rows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?, ?)', [j.debit, j.credit]) as any
+  const typeOf = (code: string) => rows.find((r: any) => r.code === code)?.type
+  const dDelta = j.amount * sign * balanceSign(typeOf(j.debit),  'debit')
+  const cDelta = j.amount * sign * balanceSign(typeOf(j.credit), 'credit')
+  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [dDelta, j.debit])
+  await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [cDelta, j.credit])
 }
 
 // 税抜経理：課税科目を税込→税抜に補正し、消費税分を仮受/仮払消費税へ振り替える。
