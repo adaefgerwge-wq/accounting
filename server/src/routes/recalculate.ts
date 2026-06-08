@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { mapJournal } from '../mappers.js'
-import { planTax } from '../tax.js'
+import { mapAccount, mapJournal, mapJournalLine } from '../mappers.js'
 import { balanceSign } from '../balance.js'
 
 export const recalculateRouter = Router()
@@ -10,55 +9,51 @@ recalculateRouter.post('/', async (_req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
-
-    // 現在の経理方式を取得
-    const [settingRows] = await conn.query("SELECT value FROM settings WHERE key_name = 'tax_method'") as any
-    const taxMethod: 'inclusive' | 'exclusive' = settingRows[0]?.value === 'exclusive' ? 'exclusive' : 'inclusive'
-
-    // 全科目の残高をゼロにリセット
     await conn.query('UPDATE accounts SET balance = 0')
 
-    // 消費税自動仕訳（消費税: というprefixのもの）を削除
-    await conn.query("DELETE FROM journals WHERE memo LIKE '消費税: %'")
+    const [jRows] = await conn.query('SELECT * FROM journals ORDER BY date, id') as any
+    if (jRows.length) {
+      const ids = jRows.map((r: any) => r.id)
+      const [lRows] = await conn.query('SELECT * FROM journal_lines WHERE journal_id IN (?) ORDER BY id', [ids]) as any
+      const linesByJournal = new Map<number, any[]>()
+      for (const r of lRows) {
+        if (!linesByJournal.has(r.journal_id)) linesByJournal.set(r.journal_id, [])
+        linesByJournal.get(r.journal_id)!.push(r)
+      }
 
-    // 残った全仕訳を取得
-    const [journalRows] = await conn.query('SELECT * FROM journals ORDER BY date, id') as any
-    const journals = (journalRows as Parameters<typeof mapJournal>[0][]).map(mapJournal)
+      const codes = [...new Set(lRows.map((r: any) => r.account_code as string))]
+      const [accRows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?)', [codes]) as any
+      const typeOf = new Map<string, string>(accRows.map((r: any) => [r.code, r.type]))
 
-    for (const j of journals) {
-      const [debitRow]  = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.debit]) as any
-      const [creditRow] = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.credit]) as any
-      const debitType  = debitRow[0]?.type
-      const creditType = creditRow[0]?.type
-
-      // 本体仕訳の残高を科目の種類に応じた符号で加算
-      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * balanceSign(debitType,  'debit'),  j.debit])
-      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * balanceSign(creditType, 'credit'), j.credit])
-
-      // 税抜経理の場合、消費税分を課税科目から仮受/仮払消費税へ振り替え、消費税仕訳を生成
-      if (taxMethod === 'exclusive') {
-        const plan = planTax(j.debit, j.credit, debitType, creditType, j.taxType, j.amount)
-        if (!plan) continue
-
-        // 課税科目（売上高 / 仕入高・備品 等）を税込→税抜に補正
-        await conn.query('UPDATE accounts SET balance = balance - ? WHERE code = ?', [plan.taxAmount, plan.baseCode])
-        await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [plan.taxAmount, plan.taxCode])
-        // 表示用の消費税仕訳（売上高 ／ 仮受消費税、または 仮払消費税 ／ 仕入高 等）
-        await conn.query(
-          'INSERT INTO journals (fiscal_year_id, date, debit, debit_partner, credit, credit_partner, amount, tax_type, memo) VALUES (?,?,?,?,?,?,?,?,?)',
-          [j.fiscalYearId, j.date, plan.taxDebit, '', plan.taxCredit, '', plan.taxAmount, 'none', `消費税: ${j.memo}`]
-        )
+      for (const jr of jRows) {
+        const lines = linesByJournal.get(jr.id) ?? []
+        for (const l of lines) {
+          const delta = l.amount * balanceSign(typeOf.get(l.account_code), l.side)
+          await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [delta, l.account_code])
+        }
       }
     }
 
     await conn.commit()
 
     const [accountRows] = await pool.query('SELECT * FROM accounts ORDER BY code') as any
-    const [allJournals] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
+    const [allJRows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
+    const journals = []
+    if (allJRows.length) {
+      const ids = allJRows.map((r: any) => r.id)
+      const [lRows] = await pool.query('SELECT * FROM journal_lines WHERE journal_id IN (?) ORDER BY id', [ids]) as any
+      const linesByJournal = new Map<number, any[]>()
+      for (const r of lRows) {
+        if (!linesByJournal.has(r.journal_id)) linesByJournal.set(r.journal_id, [])
+        linesByJournal.get(r.journal_id)!.push(mapJournalLine(r))
+      }
+      for (const r of allJRows) journals.push(mapJournal(r, linesByJournal.get(r.id) ?? []))
+    }
+
     res.json({
-      message: `再計算完了（${journals.length}件の仕訳を処理）`,
-      accounts: accountRows,
-      journals: (allJournals as Parameters<typeof mapJournal>[0][]).map(mapJournal),
+      message: `再計算完了（${allJRows.length}件の仕訳を処理）`,
+      accounts: accountRows.map(mapAccount),
+      journals,
     })
   } catch (e) { await conn.rollback(); next(e) } finally { conn.release() }
 })

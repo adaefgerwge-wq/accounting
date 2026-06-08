@@ -25,25 +25,25 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   getState: () => request<AppData>('/state'),
 
-  addJournal:    (j: Omit<Journal,'id'>)  => request<JournalState>('/journals',        { method:'POST',   body: JSON.stringify(j) }),
-  updateJournal: (j: Journal)             => request<JournalState>(`/journals/${j.id}`,{ method:'PUT',    body: JSON.stringify(j) }),
-  deleteJournal: (id: number)             => request<JournalState>(`/journals/${id}`,  { method:'DELETE' }),
+  addJournal:    (j: Omit<Journal,'id'>)  => request<JournalState>('/journals',         { method:'POST',   body: JSON.stringify(j) }),
+  updateJournal: (j: Journal)             => request<JournalState>(`/journals/${j.id}`, { method:'PUT',    body: JSON.stringify(j) }),
+  deleteJournal: (id: number)             => request<JournalState>(`/journals/${id}`,   { method:'DELETE' }),
 
-  addAccount:    (a: Account)             => request<Account[]>('/accounts',                          { method:'POST',   body: JSON.stringify(a) }),
-  updateAccount: (code: string, a: Account) => request<Account[]>(`/accounts/${encodeURIComponent(code)}`, { method:'PUT', body: JSON.stringify(a) }),
-  deleteAccount: (code: string)           => request<Account[]>(`/accounts/${encodeURIComponent(code)}`,   { method:'DELETE' }),
+  addAccount:    (a: Account)               => request<Account[]>('/accounts',                                { method:'POST',   body: JSON.stringify(a) }),
+  updateAccount: (code: string, a: Account) => request<Account[]>(`/accounts/${encodeURIComponent(code)}`,   { method:'PUT',    body: JSON.stringify(a) }),
+  deleteAccount: (code: string)             => request<Account[]>(`/accounts/${encodeURIComponent(code)}`,   { method:'DELETE' }),
 
-  addPartner:    (p: Partner)             => request<Partner[]>('/partners',                          { method:'POST',   body: JSON.stringify(p) }),
-  updatePartner: (code: string, p: Partner) => request<Partner[]>(`/partners/${encodeURIComponent(code)}`, { method:'PUT', body: JSON.stringify(p) }),
-  deletePartner: (code: string)           => request<Partner[]>(`/partners/${encodeURIComponent(code)}`,   { method:'DELETE' }),
+  addPartner:    (p: Partner)               => request<Partner[]>('/partners',                                { method:'POST',   body: JSON.stringify(p) }),
+  updatePartner: (code: string, p: Partner) => request<Partner[]>(`/partners/${encodeURIComponent(code)}`,   { method:'PUT',    body: JSON.stringify(p) }),
+  deletePartner: (code: string)             => request<Partner[]>(`/partners/${encodeURIComponent(code)}`,   { method:'DELETE' }),
 
-  addFiscalYear:   (fy: Omit<FiscalYear,'id'|'closed'>) => request<FiscalYear[]>('/fiscal-years',          { method:'POST',   body: JSON.stringify(fy) }),
-  closeFiscalYear: (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}/close`,{ method:'PUT' }),
-  deleteFiscalYear:(id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}`,     { method:'DELETE' }),
+  addFiscalYear:    (fy: Omit<FiscalYear,'id'|'closed'>) => request<FiscalYear[]>('/fiscal-years',               { method:'POST',   body: JSON.stringify(fy) }),
+  closeFiscalYear:  (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}/close`,   { method:'PUT' }),
+  deleteFiscalYear: (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}`,         { method:'DELETE' }),
 
-  exportJournalsCsv:      (fiscalYearId?: number) => `${BASE}/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
-  exportTrialBalanceCsv:  () => `${BASE}/export/trial-balance.csv`,
-  exportBackup:           () => `${BASE}/export/backup.json`,
+  exportJournalsCsv:     (fiscalYearId?: number) => `${BASE}/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
+  exportTrialBalanceCsv: () => `${BASE}/export/trial-balance.csv`,
+  exportBackup:          () => `${BASE}/export/backup.json`,
 
   restore: (data: unknown) => request<{ message: string }>('/restore', { method:'POST', body: JSON.stringify(data) }),
 }
