@@ -8,7 +8,7 @@ type JournalForm = Omit<Journal, 'id'>
 
 const TAX_OPTIONS = Object.entries(TAX_LABELS) as [TaxType, string][]
 
-// 借方に選んだ科目区分 → 貸方に選べる区分
+// 借方区分 → 選べる貸方区分
 const CREDIT_ALLOWED: Record<AccountType, AccountType[]> = {
   asset:     ['liability', 'equity', 'revenue'],
   expense:   ['asset', 'liability', 'equity'],
@@ -16,7 +16,7 @@ const CREDIT_ALLOWED: Record<AccountType, AccountType[]> = {
   equity:    ['asset', 'expense'],
   revenue:   ['asset', 'expense'],
 }
-// 貸方に選んだ科目区分 → 借方に選べる区分
+// 貸方区分 → 選べる借方区分
 const DEBIT_ALLOWED: Record<AccountType, AccountType[]> = {
   liability: ['asset', 'expense'],
   equity:    ['asset', 'expense'],
@@ -35,12 +35,13 @@ const TYPE_BG: Record<AccountType, string> = {
   asset: '#E6F1FB', liability: '#FAECE7', equity: '#EEEDFE', revenue: '#EAF3DE', expense: '#FAEEDA'
 }
 
+// 正しいテンプレート（消費税区分修正済み）
 const TEMPLATES = [
-  { label: '売上入金',  debitName: '普通預金', creditName: '売上高',   memo: '売上入金',   taxType: 'taxable10' as TaxType },
-  { label: '掛売上',   debitName: '売掛金',   creditName: '売上高',   memo: '売上計上',   taxType: 'taxable10' as TaxType },
-  { label: '掛仕入',   debitName: '仕入高',   creditName: '買掛金',   memo: '仕入計上',   taxType: 'taxable10' as TaxType },
-  { label: '買掛支払', debitName: '買掛金',   creditName: '普通預金', memo: '買掛金支払', taxType: 'none'      as TaxType },
-  { label: '給与支払', debitName: '給料手当', creditName: '普通預金', memo: '給与支払',   taxType: 'none'      as TaxType },
+  { label: '売上入金',  debitName: '普通預金', creditName: '売上高',   memo: '売上入金',   debitTax: 'none' as TaxType,       creditTax: 'taxable10' as TaxType },
+  { label: '掛売上',   debitName: '売掛金',   creditName: '売上高',   memo: '売上計上',   debitTax: 'none' as TaxType,       creditTax: 'taxable10' as TaxType },
+  { label: '掛仕入',   debitName: '仕入高',   creditName: '買掛金',   memo: '仕入計上',   debitTax: 'taxable10' as TaxType,  creditTax: 'none' as TaxType },
+  { label: '買掛支払', debitName: '買掛金',   creditName: '普通預金', memo: '買掛金支払', debitTax: 'none' as TaxType,       creditTax: 'none' as TaxType },
+  { label: '給与支払', debitName: '給料手当', creditName: '普通預金', memo: '給与支払',   debitTax: 'none' as TaxType,       creditTax: 'none' as TaxType },
 ]
 
 const emptyForm = (fiscalYearId: number): JournalForm => ({
@@ -53,10 +54,13 @@ const emptyForm = (fiscalYearId: number): JournalForm => ({
 
 export default function JournalPage() {
   const { accounts, partners, journals, fiscalYears, currentFiscalYearId, setCurrentFiscalYearId, addJournal, updateJournal, deleteJournal } = useApp()
-  const [alertMsg, setAlertMsg]   = useState<string | null>(null)
+  const [alertMsg, setAlertMsg]     = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Journal | null>(null)
-  const [form, setForm]           = useState<JournalForm>(emptyForm(currentFiscalYearId ?? 1))
-  const [open, setOpen]           = useState(false)
+  const [form, setForm]             = useState<JournalForm>(emptyForm(currentFiscalYearId ?? 1))
+  const [open, setOpen]             = useState(false)
+  // 借方・貸方それぞれの消費税区分を別管理
+  const [debitTax,  setDebitTax]  = useState<TaxType>('none')
+  const [creditTax, setCreditTax] = useState<TaxType>('none')
 
   const getAccount     = (code: string) => accounts.find(a => a.code === code)
   const getAccountName = (code: string) => getAccount(code)?.name ?? code
@@ -65,9 +69,8 @@ export default function JournalPage() {
   const partnersFor    = (code: string) => { const a = getAccount(code); if (!a?.hasSub) return []; return partners.filter(p => p.accountCode === code) }
   const needsPartner   = (code: string) => Boolean(getAccount(code)?.hasSub)
 
-  // 借方科目の区分に基づいて貸方の選択肢を絞り込む
-  const debitType   = getAccount(form.debit)?.type
-  const creditType  = getAccount(form.credit)?.type
+  const debitType  = getAccount(form.debit)?.type
+  const creditType = getAccount(form.credit)?.type
   const allowedCredit = debitType  ? CREDIT_ALLOWED[debitType]  : null
   const allowedDebit  = creditType ? DEBIT_ALLOWED[creditType]  : null
 
@@ -87,35 +90,50 @@ export default function JournalPage() {
 
   const openNew = () => {
     setForm(emptyForm(currentFiscalYearId ?? 1))
+    setDebitTax('none'); setCreditTax('none')
     setEditTarget(null); setOpen(true)
   }
+
   const openEdit = (j: Journal) => {
     setForm({ fiscalYearId: j.fiscalYearId, date: j.date, debit: j.debit, debitPartner: j.debitPartner, credit: j.credit, creditPartner: j.creditPartner, amount: j.amount, taxType: j.taxType, memo: j.memo })
+    // 編集時は貸方科目の税区分をtaxTypeとして使用、借方は対象外
+    setDebitTax('none')
+    setCreditTax(j.taxType)
     setEditTarget(j); setOpen(true)
   }
 
   const applyTemplate = (t: typeof TEMPLATES[number]) => {
     const debit  = accountByName(t.debitName)?.code  ?? ''
     const credit = accountByName(t.creditName)?.code ?? ''
-    setForm(f => ({ ...f, debit, credit, debitPartner: '', creditPartner: '', memo: f.memo || t.memo, taxType: t.taxType }))
+    setDebitTax(t.debitTax)
+    setCreditTax(t.creditTax)
+    // taxTypeは課税科目側を使う
+    const taxType = t.creditTax !== 'none' ? t.creditTax : t.debitTax
+    setForm(f => ({ ...f, debit, credit, debitPartner: '', creditPartner: '', memo: f.memo || t.memo, taxType }))
   }
 
   const set = (key: keyof JournalForm, val: string | number) => setForm(f => ({ ...f, [key]: val }))
 
   const handleDebitChange = (code: string) => {
-    // 借方を変えたとき、貸方が選択不可になったらリセット
     const newDebitType = getAccount(code)?.type
     const allowed = newDebitType ? CREDIT_ALLOWED[newDebitType] : null
     const creditStillValid = !allowed || (creditType && allowed.includes(creditType))
-    setForm(f => ({ ...f, debit: code, debitPartner: '', credit: creditStillValid ? f.credit : '', creditPartner: '' }))
+    // 科目のデフォルト消費税区分を自動セット
+    const defaultTax = getAccount(code)?.defaultTaxType ?? 'none'
+    setDebitTax(defaultTax)
+    // taxTypeは課税側を優先
+    const newTaxType = defaultTax !== 'none' ? defaultTax : creditTax
+    setForm(f => ({ ...f, debit: code, debitPartner: '', credit: creditStillValid ? f.credit : '', creditPartner: '', taxType: newTaxType }))
   }
 
   const handleCreditChange = (code: string) => {
-    // 貸方を変えたとき、借方が選択不可になったらリセット
     const newCreditType = getAccount(code)?.type
     const allowed = newCreditType ? DEBIT_ALLOWED[newCreditType] : null
     const debitStillValid = !allowed || (debitType && allowed.includes(debitType))
-    setForm(f => ({ ...f, credit: code, creditPartner: '', debit: debitStillValid ? f.debit : '', debitPartner: '' }))
+    const defaultTax = getAccount(code)?.defaultTaxType ?? 'none'
+    setCreditTax(defaultTax)
+    const newTaxType = defaultTax !== 'none' ? defaultTax : debitTax
+    setForm(f => ({ ...f, credit: code, creditPartner: '', debit: debitStillValid ? f.debit : '', debitPartner: '', taxType: newTaxType }))
   }
 
   const handleSubmit = async () => {
@@ -137,12 +155,8 @@ export default function JournalPage() {
   const currentFY = fiscalYears.find(f => f.id === currentFiscalYearId)
   const isClosed  = currentFY?.closed ?? false
 
-  // 科目セレクトのoptionをグループ別に表示
   const AccountSelect = ({ value, onChange, candidates, placeholder }: {
-    value: string
-    onChange: (code: string) => void
-    candidates: typeof accounts
-    placeholder: string
+    value: string; onChange: (code: string) => void; candidates: typeof accounts; placeholder: string
   }) => {
     const types: AccountType[] = ['asset', 'liability', 'equity', 'revenue', 'expense']
     return (
@@ -201,21 +215,20 @@ export default function JournalPage() {
                 : filteredJournals.map(j => {
                   const da = getAccount(j.debit)
                   const ca = getAccount(j.credit)
+                  // 借方・貸方の消費税区分を科目のデフォルトから推定
+                  const jDebitTax  = da?.defaultTaxType === j.taxType ? j.taxType : (da?.defaultTaxType ?? 'none')
+                  const jCreditTax = ca?.defaultTaxType === j.taxType ? j.taxType : (ca?.defaultTaxType !== 'none' ? ca?.defaultTaxType ?? 'none' : j.taxType)
                   return (
                     <tr key={j.id}>
                       <td style={{ color: '#888', borderRight: '0.5px solid #f0ede6' }}>{j.date}</td>
-                      <td>
-                        {da && <span className="account-badge" style={{ background: TYPE_BG[da.type], color: TYPE_COLORS[da.type] }}>{getAccountName(j.debit)}</span>}
-                      </td>
+                      <td>{da && <span className="account-badge" style={{ background: TYPE_BG[da.type], color: TYPE_COLORS[da.type] }}>{getAccountName(j.debit)}</span>}</td>
                       <td>{j.debitPartner ? <span className="partner-chip"><i className="ti ti-building" style={{ fontSize: 10 }} />{getPartnerName(j.debitPartner)}</span> : <span style={{ color: '#ccc' }}>—</span>}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{j.amount.toLocaleString()}</td>
-                      <td style={{ borderRight: '0.5px solid #f0ede6' }}><span className={`tax-tag tax-${j.taxType}`}>{TAX_LABELS[j.taxType]}</span></td>
-                      <td>
-                        {ca && <span className="account-badge" style={{ background: TYPE_BG[ca.type], color: TYPE_COLORS[ca.type] }}>{getAccountName(j.credit)}</span>}
-                      </td>
+                      <td style={{ borderRight: '0.5px solid #f0ede6' }}><span className={`tax-tag tax-${jDebitTax}`}>{TAX_LABELS[jDebitTax as keyof typeof TAX_LABELS]}</span></td>
+                      <td>{ca && <span className="account-badge" style={{ background: TYPE_BG[ca.type], color: TYPE_COLORS[ca.type] }}>{getAccountName(j.credit)}</span>}</td>
                       <td>{j.creditPartner ? <span className="partner-chip"><i className="ti ti-building" style={{ fontSize: 10 }} />{getPartnerName(j.creditPartner)}</span> : <span style={{ color: '#ccc' }}>—</span>}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{j.amount.toLocaleString()}</td>
-                      <td style={{ borderRight: '0.5px solid #f0ede6' }}><span className={`tax-tag tax-${j.taxType}`}>{TAX_LABELS[j.taxType]}</span></td>
+                      <td style={{ borderRight: '0.5px solid #f0ede6' }}><span className={`tax-tag tax-${jCreditTax}`}>{TAX_LABELS[jCreditTax as keyof typeof TAX_LABELS]}</span></td>
                       <td style={{ color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.memo}</td>
                       <td><div className="actions-cell">
                         {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
@@ -230,10 +243,10 @@ export default function JournalPage() {
       </div>
 
       {open && (
-        <Modal title={<><i className={`ti ti-${editTarget ? 'pencil' : 'file-text'}`} />{editTarget ? '仕訳を編集' : '新規仕訳'}</>}
+        <Modal
+          title={<><i className={`ti ti-${editTarget ? 'pencil' : 'file-text'}`} />{editTarget ? '仕訳を編集' : '新規仕訳'}</>}
           onClose={() => setOpen(false)} onSubmit={handleSubmit} submitLabel={editTarget ? '更新' : '保存'}>
 
-          {/* テンプレート */}
           <div className="form-row">
             <label>よく使う仕訳から選ぶ</label>
             <div className="template-grid">
@@ -253,20 +266,23 @@ export default function JournalPage() {
             <div style={{ fontSize: 11, fontWeight: 600, color: '#3C3489', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>借方（何が増えた・何を使った）</div>
             <div className="form-row" style={{ marginBottom: 8 }}>
               <label>科目</label>
-              <AccountSelect
-                value={form.debit}
-                onChange={handleDebitChange}
-                candidates={form.credit ? availableDebits : accounts}
-                placeholder="科目を選択"
-              />
+              <AccountSelect value={form.debit} onChange={handleDebitChange} candidates={form.credit ? availableDebits : accounts} placeholder="科目を選択" />
               {debitType && (
                 <div style={{ marginTop: 4, fontSize: 11, color: TYPE_COLORS[debitType] }}>
                   ▶ {TYPE_LABELS[debitType]}科目 — 貸方は{allowedCredit?.map(t => TYPE_LABELS[t]).join('・')}から選べます
                 </div>
               )}
             </div>
-            {needsPartner(form.debit) && (
+            {form.debit && (
               <div className="form-row" style={{ marginBottom: 0 }}>
+                <label>消費税区分</label>
+                <select value={debitTax} onChange={e => { setDebitTax(e.target.value as TaxType); if (e.target.value !== 'none') set('taxType', e.target.value) }} style={{ width: '100%' }}>
+                  {TAX_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            )}
+            {needsPartner(form.debit) && (
+              <div className="form-row" style={{ marginBottom: 0, marginTop: 8 }}>
                 <label>取引先 <strong className="required-mark">必須</strong></label>
                 <select value={form.debitPartner} onChange={e => set('debitPartner', e.target.value)} style={{ width: '100%' }}>
                   <option value="">— 選択 —</option>
@@ -281,20 +297,23 @@ export default function JournalPage() {
             <div style={{ fontSize: 11, fontWeight: 600, color: '#993C1D', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>貸方（何が減った・何から来た）</div>
             <div className="form-row" style={{ marginBottom: 8 }}>
               <label>科目</label>
-              <AccountSelect
-                value={form.credit}
-                onChange={handleCreditChange}
-                candidates={form.debit ? availableCredits : accounts}
-                placeholder="科目を選択"
-              />
+              <AccountSelect value={form.credit} onChange={handleCreditChange} candidates={form.debit ? availableCredits : accounts} placeholder="科目を選択" />
               {creditType && (
                 <div style={{ marginTop: 4, fontSize: 11, color: TYPE_COLORS[creditType] }}>
                   ▶ {TYPE_LABELS[creditType]}科目
                 </div>
               )}
             </div>
-            {needsPartner(form.credit) && (
+            {form.credit && (
               <div className="form-row" style={{ marginBottom: 0 }}>
+                <label>消費税区分</label>
+                <select value={creditTax} onChange={e => { setCreditTax(e.target.value as TaxType); if (e.target.value !== 'none') set('taxType', e.target.value) }} style={{ width: '100%' }}>
+                  {TAX_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            )}
+            {needsPartner(form.credit) && (
+              <div className="form-row" style={{ marginBottom: 0, marginTop: 8 }}>
                 <label>取引先 <strong className="required-mark">必須</strong></label>
                 <select value={form.creditPartner} onChange={e => set('creditPartner', e.target.value)} style={{ width: '100%' }}>
                   <option value="">— 選択 —</option>
@@ -302,13 +321,6 @@ export default function JournalPage() {
                 </select>
               </div>
             )}
-          </div>
-
-          <div className="form-row">
-            <label>消費税区分</label>
-            <select value={form.taxType} onChange={e => set('taxType', e.target.value)} style={{ width: '100%' }}>
-              {TAX_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
           </div>
 
           <div className="form-row">

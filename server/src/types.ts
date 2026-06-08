@@ -16,6 +16,7 @@ export interface Account {
   type: AccountType
   balance: number
   hasSub: boolean
+  defaultTaxType: TaxType
 }
 
 export interface Partner {

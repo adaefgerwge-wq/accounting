@@ -2,18 +2,20 @@ import type { Account, Journal, Partner } from './types.js'
 
 // 期首残高（BS貸借一致: 資産合計 = 負債+純資産 = 4,200,000円）
 export const initialAccounts: Account[] = [
-  { code: '1010', name: '現金',       type: 'asset',     balance: 500000,  hasSub: false },
-  { code: '1020', name: '普通預金',   type: 'asset',     balance: 2700000, hasSub: false },
-  { code: '1100', name: '売掛金',     type: 'asset',     balance: 600000,  hasSub: true  },
-  { code: '1500', name: '備品',       type: 'asset',     balance: 400000,  hasSub: false },
-  { code: '2010', name: '買掛金',     type: 'liability', balance: 300000,  hasSub: true  },
-  { code: '2100', name: '短期借入金', type: 'liability', balance: 1000000, hasSub: false },
-  { code: '3010', name: '資本金',     type: 'equity',    balance: 2000000, hasSub: false },
-  { code: '3020', name: '利益剰余金', type: 'equity',    balance: 900000,  hasSub: false },
-  { code: '4010', name: '売上高',     type: 'revenue',   balance: 0,       hasSub: false },
-  { code: '5010', name: '仕入高',     type: 'expense',   balance: 0,       hasSub: false },
-  { code: '5020', name: '給料手当',   type: 'expense',   balance: 0,       hasSub: false },
-  { code: '5030', name: '地代家賃',   type: 'expense',   balance: 0,       hasSub: false },
+  { code: '1010', name: '現金',       type: 'asset',     balance: 500000,  hasSub: false, defaultTaxType: 'none' },
+  { code: '1020', name: '普通預金',   type: 'asset',     balance: 2700000, hasSub: false, defaultTaxType: 'none' },
+  { code: '1100', name: '売掛金',     type: 'asset',     balance: 600000,  hasSub: true,  defaultTaxType: 'none' },
+  { code: '1150', name: '仮払消費税', type: 'asset',     balance: 0,       hasSub: false, defaultTaxType: 'none' },
+  { code: '1500', name: '備品',       type: 'asset',     balance: 400000,  hasSub: false, defaultTaxType: 'taxable10' },
+  { code: '2010', name: '買掛金',     type: 'liability', balance: 300000,  hasSub: true,  defaultTaxType: 'none' },
+  { code: '2050', name: '仮受消費税', type: 'liability', balance: 0,       hasSub: false, defaultTaxType: 'none' },
+  { code: '2100', name: '短期借入金', type: 'liability', balance: 1000000, hasSub: false, defaultTaxType: 'none' },
+  { code: '3010', name: '資本金',     type: 'equity',    balance: 2000000, hasSub: false, defaultTaxType: 'none' },
+  { code: '3020', name: '利益剰余金', type: 'equity',    balance: 900000,  hasSub: false, defaultTaxType: 'none' },
+  { code: '4010', name: '売上高',     type: 'revenue',   balance: 0,       hasSub: false, defaultTaxType: 'taxable10' },
+  { code: '5010', name: '仕入高',     type: 'expense',   balance: 0,       hasSub: false, defaultTaxType: 'taxable10' },
+  { code: '5020', name: '給料手当',   type: 'expense',   balance: 0,       hasSub: false, defaultTaxType: 'none' },
+  { code: '5030', name: '地代家賃',   type: 'expense',   balance: 0,       hasSub: false, defaultTaxType: 'taxable10' },
 ]
 
 export const initialPartners: Partner[] = [

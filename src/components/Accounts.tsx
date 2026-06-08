@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../store'
-import type { Account, AccountType } from '../types'
+import type { Account, AccountType, TaxType } from '../types'
+import { TAX_LABELS } from '../types'
 import Modal from './Modal'
 
 const TYPES: Record<AccountType, string> = {
@@ -13,7 +14,9 @@ const TAG_CLASS: Record<AccountType, string> = {
 
 type AccountForm = Omit<Account, 'balance'> & { balance: string }
 
-const emptyForm = (): AccountForm => ({ code: '', name: '', type: 'asset', balance: '0', hasSub: false })
+const emptyForm = (): AccountForm => ({ code: '', name: '', type: 'asset', balance: '0', hasSub: false, defaultTaxType: 'none' })
+
+const TAX_OPTIONS = Object.entries(TAX_LABELS) as [TaxType, string][]
 
 export default function AccountsPage() {
   const { accounts, partners, addAccount, updateAccount, deleteAccount } = useApp()
@@ -30,9 +33,9 @@ export default function AccountsPage() {
   }
 
   const handleSubmit = async () => {
-    const { code, name, type, balance, hasSub } = form
+    const { code, name, type, balance, hasSub, defaultTaxType } = form
     if (!code.trim() || !name.trim()) { alert('コードと科目名を入力してください'); return }
-    const account: Account = { code: code.trim(), name: name.trim(), type, balance: parseInt(balance) || 0, hasSub }
+    const account: Account = { code: code.trim(), name: name.trim(), type, balance: parseInt(balance) || 0, hasSub, defaultTaxType }
     try {
       if (editIdx !== null) {
         await updateAccount(editIdx, account)
@@ -68,7 +71,7 @@ export default function AccountsPage() {
         <table>
           <thead>
             <tr>
-              <th>コード</th><th>科目名</th><th>区分</th><th>補助科目対応</th>
+              <th>コード</th><th>科目名</th><th>区分</th><th>既定の消費税区分</th><th>補助科目対応</th>
               <th style={{ textAlign: 'right' }}>残高</th><th />
             </tr>
           </thead>
@@ -80,6 +83,7 @@ export default function AccountsPage() {
                   <td style={{ color: '#888', fontVariantNumeric: 'tabular-nums' }}>{a.code}</td>
                   <td>{a.name}</td>
                   <td><span className={`tag ${TAG_CLASS[a.type]}`}>{TYPES[a.type]}</span></td>
+                  <td><span className={`tax-tag tax-${a.defaultTaxType}`}>{TAX_LABELS[a.defaultTaxType]}</span></td>
                   <td>
                     {a.hasSub
                       ? <><span className="tag tag-sub">有効</span>{relCount > 0 && <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>{relCount}件</span>}</>
@@ -126,6 +130,13 @@ export default function AccountsPage() {
           <div className="form-row">
             <label>期初残高</label>
             <input type="number" value={form.balance} onChange={e => set('balance', e.target.value)} />
+          </div>
+          <div className="form-row">
+            <label>既定の消費税区分</label>
+            <select style={{ width: '100%' }} value={form.defaultTaxType} onChange={e => set('defaultTaxType', e.target.value as TaxType)}>
+              {TAX_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <div className="form-hint">仕訳入力でこの科目を選んだとき、自動でこの消費税区分が入ります</div>
           </div>
           <div className="form-row">
             <label>補助科目（取引先紐づけ）を使用する</label>

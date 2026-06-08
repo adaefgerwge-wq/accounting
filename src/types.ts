@@ -17,6 +17,7 @@ export interface Account {
   type: AccountType
   balance: number
   hasSub: boolean
+  defaultTaxType: TaxType
 }
 
 export interface Partner {
@@ -40,9 +41,9 @@ export interface Journal {
 }
 
 export const TAX_LABELS: Record<TaxType, string> = {
-  none: '対象外',
-  taxable10: '課税 10%',
-  taxable8:  '軽減 8%',
-  exempt:    '非課税',
+  none:        '対象外',
+  taxable10:   '課税 10%',
+  taxable8:    '軽減 8%',
+  exempt:      '非課税',
   non_taxable: '不課税',
 }

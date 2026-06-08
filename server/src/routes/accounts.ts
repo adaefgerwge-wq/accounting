@@ -18,8 +18,8 @@ accountsRouter.post('/', async (req, res, next) => {
   const account = req.body as Account
   try {
     await pool.query(
-      'INSERT INTO accounts (code, name, type, balance, has_sub) VALUES (?, ?, ?, ?, ?)',
-      [account.code, account.name, account.type, account.balance, account.hasSub]
+      'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES (?, ?, ?, ?, ?, ?)',
+      [account.code, account.name, account.type, account.balance, account.hasSub, account.defaultTaxType ?? 'none']
     )
     const [rows] = await pool.query('SELECT * FROM accounts ORDER BY code')
     res.status(201).json((rows as Parameters<typeof mapAccount>[0][]).map(mapAccount))
@@ -32,8 +32,8 @@ accountsRouter.put('/:code', async (req, res, next) => {
   const account = req.body as Account
   try {
     const [result] = await pool.query(
-      'UPDATE accounts SET code = ?, name = ?, type = ?, balance = ?, has_sub = ? WHERE code = ?',
-      [account.code, account.name, account.type, account.balance, account.hasSub, req.params.code]
+      'UPDATE accounts SET code = ?, name = ?, type = ?, balance = ?, has_sub = ?, default_tax_type = ? WHERE code = ?',
+      [account.code, account.name, account.type, account.balance, account.hasSub, account.defaultTaxType ?? 'none', req.params.code]
     )
 
     if ('affectedRows' in result && result.affectedRows === 0) {

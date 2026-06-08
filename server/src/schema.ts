@@ -15,12 +15,21 @@ export async function ensureSchema() {
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
-      code       VARCHAR(20) PRIMARY KEY,
-      name       VARCHAR(255) NOT NULL,
-      type       ENUM('asset','liability','equity','revenue','expense') NOT NULL,
-      balance    INT          NOT NULL DEFAULT 0,
-      has_sub    BOOLEAN      NOT NULL DEFAULT false,
+      code             VARCHAR(20) PRIMARY KEY,
+      name             VARCHAR(255) NOT NULL,
+      type             ENUM('asset','liability','equity','revenue','expense') NOT NULL,
+      balance          INT          NOT NULL DEFAULT 0,
+      has_sub          BOOLEAN      NOT NULL DEFAULT false,
+      default_tax_type ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none',
       created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key_name   VARCHAR(50)  PRIMARY KEY,
+      value      VARCHAR(255) NOT NULL,
       updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `)
@@ -70,6 +79,31 @@ export async function ensureSchema() {
     ALTER TABLE journals
     ADD COLUMN IF NOT EXISTS tax_type ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none' AFTER amount
   `).catch(() => {})
+
+  // default_tax_type カラムが無ければ追加（科目ごとのデフォルト消費税区分）
+  await pool.query(`
+    ALTER TABLE accounts
+    ADD COLUMN IF NOT EXISTS default_tax_type ENUM('none','taxable10','taxable8','exempt','non_taxable') NOT NULL DEFAULT 'none' AFTER has_sub
+  `).catch(() => {})
+
+  await backfillTaxDefaults()
+}
+
+// 既存DB向け：消費税勘定の補完と、科目デフォルト税区分の初期設定（一度きり）
+async function backfillTaxDefaults() {
+  // 仮払消費税・仮受消費税が無ければ追加
+  await pool.query(
+    "INSERT IGNORE INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES " +
+    "('1150','仮払消費税','asset',0,false,'none'),('2050','仮受消費税','liability',0,false,'none')"
+  ).catch(() => {})
+
+  // デフォルト税区分の初期値は一度だけ流し込む（ユーザーの変更を上書きしない）
+  const [rows] = await pool.query("SELECT value FROM settings WHERE key_name = 'tax_defaults_seeded'") as any
+  if (rows.length) return
+  await pool.query("UPDATE accounts SET default_tax_type = 'taxable10' WHERE code IN ('1500','4010','5010','5030')")
+  await pool.query(
+    "INSERT INTO settings (key_name, value) VALUES ('tax_defaults_seeded','1') ON DUPLICATE KEY UPDATE value = '1'"
+  )
 }
 
 export async function seedIfEmpty() {
@@ -89,8 +123,8 @@ export async function seedIfEmpty() {
     )
 
     await connection.query(
-      'INSERT INTO accounts (code, name, type, balance, has_sub) VALUES ?',
-      [initialAccounts.map(a => [a.code, a.name, a.type, a.balance, a.hasSub])]
+      'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
+      [initialAccounts.map(a => [a.code, a.name, a.type, a.balance, a.hasSub, a.defaultTaxType ?? 'none'])]
     )
     await connection.query(
       'INSERT INTO partners (code, name, type, account_code) VALUES ?',
