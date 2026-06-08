@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db.js'
 import { mapJournal } from '../mappers.js'
 import { planTax } from '../tax.js'
+import { balanceSign } from '../balance.js'
 
 export const recalculateRouter = Router()
 
@@ -25,15 +26,18 @@ recalculateRouter.post('/', async (_req, res, next) => {
     const journals = (journalRows as Parameters<typeof mapJournal>[0][]).map(mapJournal)
 
     for (const j of journals) {
-      // 本体仕訳の残高を加算
-      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount, j.debit])
-      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount, j.credit])
+      const [debitRow]  = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.debit]) as any
+      const [creditRow] = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.credit]) as any
+      const debitType  = debitRow[0]?.type
+      const creditType = creditRow[0]?.type
+
+      // 本体仕訳の残高を科目の種類に応じた符号で加算
+      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * balanceSign(debitType,  'debit'),  j.debit])
+      await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [j.amount * balanceSign(creditType, 'credit'), j.credit])
 
       // 税抜経理の場合、消費税分を課税科目から仮受/仮払消費税へ振り替え、消費税仕訳を生成
       if (taxMethod === 'exclusive') {
-        const [debitRow]  = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.debit]) as any
-        const [creditRow] = await conn.query('SELECT type FROM accounts WHERE code = ?', [j.credit]) as any
-        const plan = planTax(j.debit, j.credit, debitRow[0]?.type, creditRow[0]?.type, j.taxType, j.amount)
+        const plan = planTax(j.debit, j.credit, debitType, creditType, j.taxType, j.amount)
         if (!plan) continue
 
         // 課税科目（売上高 / 仕入高・備品 等）を税込→税抜に補正
