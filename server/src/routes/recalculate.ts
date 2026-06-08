@@ -52,11 +52,19 @@ recalculateRouter.post('/', async (_req, res, next) => {
 
         if (taxMethod === 'exclusive') {
           // ── 税抜モード：本体行を税抜金額にして消費税行を再生成 ──
+          // 既に消費税行がある場合は同side分を加算して税込金額に戻してから分割（2重分割防止）
+          const existingTaxBySide = new Map<string, number>()
+          for (const tl of taxLines) {
+            existingTaxBySide.set(tl.side, (existingTaxBySide.get(tl.side) ?? 0) + tl.amount)
+          }
+
           finalLines = []
           for (const l of baseLines) {
-            const { taxAmount } = calcTax(l.amount, l.tax_type)
+            // 既に税抜済みなら税込金額に戻す
+            const inclusiveAmount = l.amount + (existingTaxBySide.get(l.side) ?? 0)
+            const { taxAmount } = calcTax(inclusiveAmount, l.tax_type)
             if (!taxAmount) {
-              finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: l.amount, taxType: l.tax_type })
+              finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: inclusiveAmount, taxType: l.tax_type })
               continue
             }
             const accType = typeOf.get(l.account_code)
@@ -65,14 +73,14 @@ recalculateRouter.post('/', async (_req, res, next) => {
               l.side === 'credit' ? l.account_code : '__other__',
               l.side === 'debit'  ? accType : undefined,
               l.side === 'credit' ? accType : undefined,
-              l.tax_type, l.amount
+              l.tax_type, inclusiveAmount
             )
             if (!plan) {
-              finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: l.amount, taxType: l.tax_type })
+              finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: inclusiveAmount, taxType: l.tax_type })
               continue
             }
             // 課税行を税抜金額に補正
-            finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: l.amount - plan.taxAmount, taxType: l.tax_type })
+            finalLines.push({ side: l.side, accountCode: l.account_code, partnerCode: l.partner_code, amount: inclusiveAmount - plan.taxAmount, taxType: l.tax_type })
             // 消費税行を追加
             finalLines.push({ side: l.side, accountCode: plan.taxCode, partnerCode: '', amount: plan.taxAmount, taxType: 'none' })
           }
