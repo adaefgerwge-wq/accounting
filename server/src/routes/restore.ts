@@ -23,8 +23,8 @@ restoreRouter.post('/', async (req, res, next) => {
       [fiscalYears.map((f: any) => [f.id, f.name, f.start_date, f.end_date, f.closed])]
     )
     if (accounts.length) await conn.query(
-      'INSERT INTO accounts (code, name, type, balance, has_sub) VALUES ?',
-      [accounts.map((a: any) => [a.code, a.name, a.type, a.balance, a.has_sub])]
+      'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
+      [accounts.map((a: any) => [a.code, a.name, a.type, a.balance, a.has_sub, a.default_tax_type ?? 'none'])]
     )
     if (partners.length) await conn.query(
       'INSERT INTO partners (code, name, type, account_code) VALUES ?',

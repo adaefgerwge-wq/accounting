@@ -8,6 +8,8 @@ import { stateRouter }       from './routes/state.js'
 import { fiscalYearsRouter } from './routes/fiscal-years.js'
 import { exportRouter }      from './routes/export.js'
 import { restoreRouter }     from './routes/restore.js'
+import { settingsRouter }    from './routes/settings.js'
+import { recalculateRouter } from './routes/recalculate.js'
 import { reportRouter }      from './routes/report.js'
 import { invoicesRouter }    from './routes/invoices.js'
 import { bankRulesRouter }   from './routes/bank-rules.js'
@@ -28,6 +30,8 @@ app.use('/api/journals',     journalsRouter)
 app.use('/api/fiscal-years', fiscalYearsRouter)
 app.use('/api/export',       exportRouter)
 app.use('/api/restore',      restoreRouter)
+app.use('/api/settings',      settingsRouter)
+app.use('/api/recalculate',   recalculateRouter)
 app.use('/api/report',        reportRouter)
 app.use('/api/invoices',     invoicesRouter)
 app.use('/api/bank-rules',   bankRulesRouter)
