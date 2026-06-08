@@ -45,8 +45,15 @@ const TYPE_BG: Record<string, string> = {
 const emptyLine = (side: 'debit' | 'credit'): LineDraft =>
   ({ side, accountCode: '', partnerCode: '', amount: 0, taxType: 'none' })
 
+// ローカルタイムゾーンの今日の日付（YYYY-MM-DD）。
+// toISOString() はUTC基準のため、JSTの朝など時刻によって前日になるのを防ぐ。
+const todayLocal = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const emptyForm = (fiscalYearId: number): JournalForm => ({
-  fiscalYearId, date: new Date().toISOString().split('T')[0], memo: '',
+  fiscalYearId, date: todayLocal(), memo: '',
   lines: [emptyLine('debit'), emptyLine('credit')],
 })
 
