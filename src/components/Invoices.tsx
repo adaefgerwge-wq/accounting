@@ -2,7 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../store'
 import Modal from './Modal'
 
-const TAX_RATES: Record<string, number> = { taxable10: 0.1, taxable8: 0.08, exempt: 0 }
+// ローカルタイムゾーン基準の日付（YYYY-MM-DD）。toISOString()のUTCずれを防ぐ。
+const localDate = (offsetDays = 0) => {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const TAX_LABELS: Record<string, string> = { taxable10: '10%', taxable8: '8%', exempt: '非課税' }
 
 interface InvoiceItem { id?: number; description: string; qty: number; unitPrice: number; taxType: 'taxable10'|'taxable8'|'exempt' }
@@ -13,8 +19,8 @@ interface Invoice {
 
 const emptyInvoice = (): Omit<Invoice,'id'|'invoiceNo'|'status'> => ({
   partnerCode: '', partnerName: '', partnerAddr: '',
-  issueDate: new Date().toISOString().slice(0,10),
-  dueDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10),
+  issueDate: localDate(),
+  dueDate: localDate(30),
   memo: '', items: [{ description: '', qty: 1, unitPrice: 0, taxType: 'taxable10' }]
 })
 
