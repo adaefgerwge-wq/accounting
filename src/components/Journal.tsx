@@ -68,14 +68,20 @@ export default function JournalPage() {
   // 補助科目名は取引先・汎用補助科目の両方から検索
   const getPartnerName = (code: string) =>
     partners.find(p => p.code === code)?.name ?? subAccounts.find(s => s.code === code)?.name ?? ''
-  // 科目に紐づく補助科目候補（取引先＋汎用補助科目）
-  const partnersFor    = (code: string) => {
+  // 科目に紐づく取引先・補助科目を分けて取得
+  const partnerOptionsFor = (code: string) => {
     const a = getAccount(code); if (!a?.hasSub) return []
-    return [
-      ...partners.filter(p => p.accountCode === code),
-      ...subAccounts.filter(s => s.accountCode === code),
-    ]
+    return partners.filter(p => p.accountCode === code)
   }
+  const subOptionsFor = (code: string) => {
+    const a = getAccount(code); if (!a?.hasSub) return []
+    return subAccounts.filter(s => s.accountCode === code)
+  }
+  // 補助科目欄に表示する候補が1件でもあるか
+  const hasAnySub = (code: string) => partnerOptionsFor(code).length > 0 || subOptionsFor(code).length > 0
+  // コードが取引先か補助科目かを判定してラベルを返す
+  const subKindLabel = (code: string) =>
+    partners.some(p => p.code === code) ? '取引先' : subAccounts.some(s => s.code === code) ? '補助' : ''
 
   const filteredJournals = currentFiscalYearId
     ? journals.filter(j => j.fiscalYearId === currentFiscalYearId)
@@ -192,7 +198,7 @@ export default function JournalPage() {
                         {/* 借方 */}
                         <td style={{ background: '#f9f9fd' }}>
                           {dAcc && <span className="account-badge" style={{ background: TYPE_BG[dAcc.type], color: TYPE_COLORS[dAcc.type] }}>{dAcc.name}</span>}
-                          {d?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}>{getPartnerName(d.partnerCode)}</span>}
+                          {d?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}><span style={{ opacity: 0.6, marginRight: 3 }}>{subKindLabel(d.partnerCode)}:</span>{getPartnerName(d.partnerCode)}</span>}
                         </td>
                         <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: '#f9f9fd' }}>
                           {d ? d.amount.toLocaleString() : ''}
@@ -205,7 +211,7 @@ export default function JournalPage() {
                         {/* 貸方 */}
                         <td style={{ background: '#fff8f7' }}>
                           {cAcc && <span className="account-badge" style={{ background: TYPE_BG[cAcc.type], color: TYPE_COLORS[cAcc.type] }}>{cAcc.name}</span>}
-                          {c?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}>{getPartnerName(c.partnerCode)}</span>}
+                          {c?.partnerCode && <span className="partner-chip" style={{ fontSize: 11, marginLeft: 4 }}><span style={{ opacity: 0.6, marginRight: 3 }}>{subKindLabel(c.partnerCode)}:</span>{getPartnerName(c.partnerCode)}</span>}
                         </td>
                         <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', background: '#fff8f7' }}>
                           {c ? c.amount.toLocaleString() : ''}
@@ -272,7 +278,8 @@ export default function JournalPage() {
               <tbody>
                 {form.lines.map((l, i) => {
                   const acc = getAccount(l.accountCode)
-                  const pOptions = partnersFor(l.accountCode)
+                  const partnerOpts = partnerOptionsFor(l.accountCode)
+                  const subOpts     = subOptionsFor(l.accountCode)
                   return (
                     <tr key={i} style={{ borderTop: '0.5px solid #f0ede6', background: l.side === 'debit' ? '#f9f9fd' : '#fff8f7' }}>
                       <td style={{ padding: '4px 6px' }}>
@@ -295,16 +302,30 @@ export default function JournalPage() {
                             )
                           })}
                         </select>
-                        {acc && pOptions.length > 0 && (
+                        {acc && hasAnySub(l.accountCode) && (
                           <select value={l.partnerCode} onChange={e => updateLine(i, { partnerCode: e.target.value })}
                             style={{ width: '100%', fontSize: 11, marginTop: 2 }}>
-                            <option value="">— 取引先 —</option>
-                            {pOptions.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                            <option value="">— 取引先・補助科目 —</option>
+                            {partnerOpts.length > 0 && (
+                              <optgroup label="取引先">
+                                {partnerOpts.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                              </optgroup>
+                            )}
+                            {subOpts.length > 0 && (
+                              <optgroup label="補助科目">
+                                {subOpts.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                              </optgroup>
+                            )}
                           </select>
                         )}
                       </td>
                       <td style={{ padding: '4px 6px' }}>
-                        {l.partnerCode && <span className="partner-chip" style={{ fontSize: 11 }}>{getPartnerName(l.partnerCode)}</span>}
+                        {l.partnerCode && (
+                          <span className="partner-chip" style={{ fontSize: 11 }}>
+                            <span style={{ opacity: 0.6, marginRight: 3 }}>{subKindLabel(l.partnerCode)}:</span>
+                            {getPartnerName(l.partnerCode)}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '4px 6px' }}>
                         <input type="number" value={l.amount || ''} min={0}
