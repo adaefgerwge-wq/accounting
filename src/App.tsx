@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import Journal from './components/Journal'
 import Accounts from './components/Accounts'
 import Partners from './components/Partners'
+import SubAccounts from './components/SubAccounts'
 import BS from './components/BS'
 import PL from './components/PL'
 import TrialBalance from './components/TrialBalance'
@@ -27,6 +28,7 @@ export default function App() {
         {currentPage === 'monthly-report' && <MonthlyReport />}
         {currentPage === 'accounts'      && <Accounts />}
         {currentPage === 'partners'      && <Partners />}
+        {currentPage === 'sub-accounts'  && <SubAccounts />}
         {currentPage === 'bs'            && <BS />}
         {currentPage === 'pl'            && <PL />}
         {currentPage === 'fiscal-years'  && <FiscalYears />}

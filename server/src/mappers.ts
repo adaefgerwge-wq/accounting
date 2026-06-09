@@ -1,7 +1,8 @@
-import type { Account, Journal, JournalLine, Partner, FiscalYear } from './types.js'
+import type { Account, Journal, JournalLine, Partner, SubAccount, FiscalYear } from './types.js'
 
 type AccountRow = { code: string; name: string; type: Account['type']; balance: number; has_sub: 0|1|boolean; default_tax_type?: string }
 type PartnerRow = { code: string; name: string; type: Partner['type']; account_code: string }
+type SubAccountRow = { code: string; name: string; account_code: string }
 type JournalRow = { id: number; fiscal_year_id: number; date: Date|string; memo: string }
 type JournalLineRow = {
   id: number; journal_id: number
@@ -20,6 +21,9 @@ export function mapAccount(row: AccountRow): Account {
 }
 export function mapPartner(row: PartnerRow): Partner {
   return { code: row.code, name: row.name, type: row.type, accountCode: row.account_code }
+}
+export function mapSubAccount(row: SubAccountRow): SubAccount {
+  return { code: row.code, name: row.name, accountCode: row.account_code }
 }
 export function mapJournalLine(row: JournalLineRow): JournalLine {
   return {

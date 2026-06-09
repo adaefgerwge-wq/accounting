@@ -1,10 +1,11 @@
-import type { Account, Journal, Partner, FiscalYear } from './types'
+import type { Account, Journal, Partner, SubAccount, FiscalYear } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export interface AppData {
   accounts: Account[]
   partners: Partner[]
+  subAccounts: SubAccount[]
   journals: Journal[]
   fiscalYears: FiscalYear[]
 }
@@ -36,6 +37,10 @@ export const api = {
   addPartner:    (p: Partner)               => request<Partner[]>('/partners',                                { method:'POST',   body: JSON.stringify(p) }),
   updatePartner: (code: string, p: Partner) => request<Partner[]>(`/partners/${encodeURIComponent(code)}`,   { method:'PUT',    body: JSON.stringify(p) }),
   deletePartner: (code: string)             => request<Partner[]>(`/partners/${encodeURIComponent(code)}`,   { method:'DELETE' }),
+
+  addSubAccount:    (s: SubAccount)               => request<SubAccount[]>('/sub-accounts',                              { method:'POST',   body: JSON.stringify(s) }),
+  updateSubAccount: (code: string, s: SubAccount) => request<SubAccount[]>(`/sub-accounts/${encodeURIComponent(code)}`, { method:'PUT',    body: JSON.stringify(s) }),
+  deleteSubAccount: (code: string)                => request<SubAccount[]>(`/sub-accounts/${encodeURIComponent(code)}`, { method:'DELETE' }),
 
   addFiscalYear:    (fy: Omit<FiscalYear,'id'|'closed'>) => request<FiscalYear[]>('/fiscal-years',               { method:'POST',   body: JSON.stringify(fy) }),
   closeFiscalYear:  (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}/close`,   { method:'PUT' }),

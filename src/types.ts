@@ -1,7 +1,7 @@
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
 export type PartnerType = 'customer' | 'vendor' | 'both'
 export type TaxType = 'none' | 'taxable10' | 'taxable8' | 'exempt' | 'non_taxable'
-export type PageId = 'journal' | 'accounts' | 'partners' | 'bs' | 'pl' | 'trial-balance' | 'fiscal-years' | 'settings' | 'invoices' | 'bank-import' | 'monthly-report'
+export type PageId = 'journal' | 'accounts' | 'partners' | 'sub-accounts' | 'bs' | 'pl' | 'trial-balance' | 'fiscal-years' | 'settings' | 'invoices' | 'bank-import' | 'monthly-report'
 
 export interface FiscalYear {
   id: number
@@ -24,6 +24,12 @@ export interface Partner {
   code: string
   name: string
   type: PartnerType
+  accountCode: string
+}
+
+export interface SubAccount {
+  code: string
+  name: string
   accountCode: string
 }
 

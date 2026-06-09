@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import type { Account, Partner, Journal, PageId, FiscalYear } from './types'
+import type { Account, Partner, SubAccount, Journal, PageId, FiscalYear } from './types'
 import { initialAccounts, initialPartners, initialJournals } from './data'
 import { api } from './api'
 
 interface AppState {
   accounts: Account[]
   partners: Partner[]
+  subAccounts: SubAccount[]
   journals: Journal[]
   fiscalYears: FiscalYear[]
   currentPage: PageId
@@ -25,6 +26,9 @@ interface AppActions {
   addPartner: (p: Partner) => Promise<void>
   updatePartner: (index: number, p: Partner) => Promise<void>
   deletePartner: (index: number) => Promise<void>
+  addSubAccount: (s: SubAccount) => Promise<void>
+  updateSubAccount: (index: number, s: SubAccount) => Promise<void>
+  deleteSubAccount: (index: number) => Promise<void>
   addFiscalYear: (fy: Omit<FiscalYear,'id'|'closed'>) => Promise<void>
   closeFiscalYear: (id: number) => Promise<void>
   deleteFiscalYear: (id: number) => Promise<void>
@@ -37,6 +41,7 @@ const AppContext = createContext<AppContextType | null>(null)
 export function AppProvider({ children }: { children: ReactNode }) {
   const [accounts,    setAccounts]    = useState<Account[]>(initialAccounts)
   const [partners,    setPartners]    = useState<Partner[]>(initialPartners)
+  const [subAccounts, setSubAccounts] = useState<SubAccount[]>([])
   const [journals,    setJournals]    = useState<Journal[]>(initialJournals)
   const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>([])
   const [currentPage, setCurrentPage] = useState<PageId>('journal')
@@ -50,6 +55,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const data = await api.getState()
       setAccounts(data.accounts)
       setPartners(data.partners)
+      setSubAccounts(data.subAccounts ?? [])
       setJournals(data.journals)
       setFiscalYears(data.fiscalYears)
       if (data.fiscalYears.length && currentFiscalYearId === null) {
@@ -88,18 +94,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updatePartner = useCallback(async (i: number, p: Partner) => setPartners(await api.updatePartner(partners[i].code, p)), [partners])
   const deletePartner = useCallback(async (i: number)             => setPartners(await api.deletePartner(partners[i].code)), [partners])
 
+  const addSubAccount    = useCallback(async (s: SubAccount)            => setSubAccounts(await api.addSubAccount(s)), [])
+  const updateSubAccount = useCallback(async (i: number, s: SubAccount) => setSubAccounts(await api.updateSubAccount(subAccounts[i].code, s)), [subAccounts])
+  const deleteSubAccount = useCallback(async (i: number)                => setSubAccounts(await api.deleteSubAccount(subAccounts[i].code)), [subAccounts])
+
   const addFiscalYear   = useCallback(async (fy: Omit<FiscalYear,'id'|'closed'>) => setFiscalYears(await api.addFiscalYear(fy)), [])
   const closeFiscalYear = useCallback(async (id: number) => setFiscalYears(await api.closeFiscalYear(id)), [])
   const deleteFiscalYear= useCallback(async (id: number) => setFiscalYears(await api.deleteFiscalYear(id)), [])
 
   return (
     <AppContext.Provider value={{
-      accounts, partners, journals, fiscalYears, currentPage, currentFiscalYearId,
+      accounts, partners, subAccounts, journals, fiscalYears, currentPage, currentFiscalYearId,
       loading, error,
       setPage, setCurrentFiscalYearId, reload,
       addJournal, updateJournal, deleteJournal,
       addAccount, updateAccount, deleteAccount,
       addPartner, updatePartner, deletePartner,
+      addSubAccount, updateSubAccount, deleteSubAccount,
       addFiscalYear, closeFiscalYear, deleteFiscalYear,
     }}>
       {children}

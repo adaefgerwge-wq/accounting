@@ -165,6 +165,7 @@ exportRouter.get('/backup.json', async (_req, res, next) => {
   try {
     const [accounts]    = await pool.query('SELECT * FROM accounts ORDER BY code') as any
     const [partners]    = await pool.query('SELECT * FROM partners ORDER BY code') as any
+    const [subAccounts] = await pool.query('SELECT * FROM sub_accounts ORDER BY account_code, code') as any
     const [jRows]       = await pool.query('SELECT * FROM journals ORDER BY date, id') as any
     const [fiscalYears] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date') as any
 
@@ -182,6 +183,6 @@ exportRouter.get('/backup.json', async (_req, res, next) => {
 
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Content-Disposition', `attachment; filename="accounting-backup-${new Date().toISOString().slice(0,10)}.json"`)
-    res.json({ exportedAt: new Date().toISOString(), accounts, partners, journals, fiscalYears })
+    res.json({ exportedAt: new Date().toISOString(), accounts, partners, subAccounts, journals, fiscalYears })
   } catch (e) { next(e) }
 })
