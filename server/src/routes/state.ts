@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { mapAccount, mapJournal, mapJournalLine, mapPartner, mapFiscalYear } from '../mappers.js'
+import { mapAccount, mapJournal, mapJournalLine, mapPartner, mapSubAccount, mapFiscalYear } from '../mappers.js'
 
 export const stateRouter = Router()
 
@@ -8,6 +8,7 @@ stateRouter.get('/', async (_req, res, next) => {
   try {
     const [accountRows]    = await pool.query('SELECT * FROM accounts ORDER BY code') as any
     const [partnerRows]    = await pool.query('SELECT * FROM partners ORDER BY code') as any
+    const [subAccountRows] = await pool.query('SELECT * FROM sub_accounts ORDER BY account_code, code') as any
     const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
     const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date DESC') as any
 
@@ -26,6 +27,7 @@ stateRouter.get('/', async (_req, res, next) => {
     res.json({
       accounts:    accountRows.map(mapAccount),
       partners:    partnerRows.map(mapPartner),
+      subAccounts: subAccountRows.map(mapSubAccount),
       journals,
       fiscalYears: fiscalYearRows.map(mapFiscalYear),
     })

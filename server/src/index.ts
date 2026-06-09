@@ -4,6 +4,7 @@ import express, { type ErrorRequestHandler } from 'express'
 import { accountsRouter }    from './routes/accounts.js'
 import { journalsRouter }    from './routes/journals.js'
 import { partnersRouter }    from './routes/partners.js'
+import { subAccountsRouter } from './routes/sub-accounts.js'
 import { stateRouter }       from './routes/state.js'
 import { fiscalYearsRouter } from './routes/fiscal-years.js'
 import { exportRouter }      from './routes/export.js'
@@ -26,6 +27,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }))
 app.use('/api/state',        stateRouter)
 app.use('/api/accounts',     accountsRouter)
 app.use('/api/partners',     partnersRouter)
+app.use('/api/sub-accounts', subAccountsRouter)
 app.use('/api/journals',     journalsRouter)
 app.use('/api/fiscal-years', fiscalYearsRouter)
 app.use('/api/export',       exportRouter)

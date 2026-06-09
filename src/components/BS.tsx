@@ -6,7 +6,7 @@ function Section({ title, items, total, journals, partners }: {
   items: Account[]
   total: number
   journals: ReturnType<typeof useApp>['journals']
-  partners: ReturnType<typeof useApp>['partners']
+  partners: { code: string; name: string; accountCode: string }[]
 }) {
   return (
     <div className="section-card">
@@ -44,7 +44,9 @@ function Section({ title, items, total, journals, partners }: {
 }
 
 export default function BSPage() {
-  const { accounts, partners, journals } = useApp()
+  const { accounts, partners, subAccounts, journals } = useApp()
+  // 補助科目内訳は取引先＋汎用補助科目の両方を表示
+  const subItems = [...partners, ...subAccounts]
 
   const assets      = accounts.filter(a => a.type === 'asset')
   const liabilities = accounts.filter(a => a.type === 'liability')
@@ -62,12 +64,12 @@ export default function BSPage() {
         <div className="grid2">
           <div>
             <div className="fs-col-label">借方（資産）</div>
-            <Section title="資産の部" items={assets} total={totalA} journals={journals} partners={partners} />
+            <Section title="資産の部" items={assets} total={totalA} journals={journals} partners={subItems} />
           </div>
           <div>
             <div className="fs-col-label">貸方（負債・純資産）</div>
-            <Section title="負債の部" items={liabilities} total={totalL} journals={journals} partners={partners} />
-            <Section title="純資産の部" items={equities} total={totalE} journals={journals} partners={partners} />
+            <Section title="負債の部" items={liabilities} total={totalL} journals={journals} partners={subItems} />
+            <Section title="純資産の部" items={equities} total={totalE} journals={journals} partners={subItems} />
             <div className="fs-row total">
               <span>負債・純資産合計</span>
               <span>{(totalL + totalE).toLocaleString()}</span>

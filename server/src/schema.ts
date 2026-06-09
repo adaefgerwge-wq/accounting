@@ -46,6 +46,18 @@ export async function ensureSchema() {
     )
   `)
 
+  // 汎用補助科目（取引先以外：銀行口座・経費区分など）
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sub_accounts (
+      code         VARCHAR(20) PRIMARY KEY,
+      name         VARCHAR(255) NOT NULL,
+      account_code VARCHAR(20)  NOT NULL,
+      created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_sub_accounts_account_code (account_code)
+    )
+  `)
+
   // journals テーブル（ヘッダーのみ：日付・摘要）
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journals (

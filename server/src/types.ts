@@ -26,6 +26,13 @@ export interface Partner {
   accountCode: string
 }
 
+// 汎用補助科目（取引先以外：銀行口座・経費区分など、どの科目にも紐づけ可）
+export interface SubAccount {
+  code: string
+  name: string
+  accountCode: string
+}
+
 export interface JournalLine {
   id: number
   journalId: number

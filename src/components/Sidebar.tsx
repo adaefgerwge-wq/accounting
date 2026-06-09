@@ -14,8 +14,9 @@ const NAV: { section: string; items: { id: PageId; icon: string; label: string }
     { id: 'pl', icon: 'ti-chart-bar',      label: '損益計算書' },
   ]},
   { section: 'マスタ', items: [
-    { id: 'accounts',     icon: 'ti-list',     label: '勘定科目' },
-    { id: 'partners',     icon: 'ti-building', label: '取引先' },
+    { id: 'accounts',     icon: 'ti-list',      label: '勘定科目' },
+    { id: 'sub-accounts', icon: 'ti-list-tree', label: '補助科目' },
+    { id: 'partners',     icon: 'ti-building',  label: '取引先' },
     { id: 'fiscal-years', icon: 'ti-calendar', label: '会計年度' },
   ]},
   { section: 'ツール', items: [

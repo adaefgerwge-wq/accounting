@@ -4,7 +4,7 @@ import { pool } from '../db.js'
 export const restoreRouter = Router()
 
 restoreRouter.post('/', async (req, res, next) => {
-  const { accounts, partners, journals, fiscalYears } = req.body
+  const { accounts, partners, subAccounts, journals, fiscalYears } = req.body
   if (!accounts || !partners || !journals || !fiscalYears) {
     res.status(400).json({ message: 'バックアップデータが不正です' }); return
   }
@@ -15,6 +15,7 @@ restoreRouter.post('/', async (req, res, next) => {
     await conn.query('TRUNCATE TABLE journal_lines')
     await conn.query('TRUNCATE TABLE journals')
     await conn.query('TRUNCATE TABLE partners')
+    await conn.query('TRUNCATE TABLE sub_accounts').catch(() => {})
     await conn.query('TRUNCATE TABLE accounts')
     await conn.query('TRUNCATE TABLE fiscal_years')
     await conn.query('SET FOREIGN_KEY_CHECKS = 1')
@@ -30,6 +31,10 @@ restoreRouter.post('/', async (req, res, next) => {
     if (partners.length) await conn.query(
       'INSERT INTO partners (code, name, type, account_code) VALUES ?',
       [partners.map((p: any) => [p.code, p.name, p.type, p.account_code])]
+    )
+    if (subAccounts?.length) await conn.query(
+      'INSERT INTO sub_accounts (code, name, account_code) VALUES ?',
+      [subAccounts.map((s: any) => [s.code, s.name, s.account_code ?? s.accountCode])]
     )
     // journals はネスト形式（lines を含む）または旧形式（debit/credit/amount）に対応
     for (const j of journals) {

@@ -58,17 +58,23 @@ const emptyForm = (fiscalYearId: number): JournalForm => ({
 })
 
 export default function JournalPage() {
-  const { accounts, partners, journals, fiscalYears, currentFiscalYearId, setCurrentFiscalYearId, addJournal, updateJournal, deleteJournal } = useApp()
+  const { accounts, partners, subAccounts, journals, fiscalYears, currentFiscalYearId, setCurrentFiscalYearId, addJournal, updateJournal, deleteJournal } = useApp()
   const [alertMsg, setAlertMsg]     = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Journal | null>(null)
   const [form, setForm]             = useState<JournalForm>(emptyForm(currentFiscalYearId ?? 1))
   const [open, setOpen]             = useState(false)
 
   const getAccount     = (code: string) => accounts.find(a => a.code === code)
-  const getPartnerName = (code: string) => partners.find(p => p.code === code)?.name ?? ''
+  // 補助科目名は取引先・汎用補助科目の両方から検索
+  const getPartnerName = (code: string) =>
+    partners.find(p => p.code === code)?.name ?? subAccounts.find(s => s.code === code)?.name ?? ''
+  // 科目に紐づく補助科目候補（取引先＋汎用補助科目）
   const partnersFor    = (code: string) => {
     const a = getAccount(code); if (!a?.hasSub) return []
-    return partners.filter(p => p.accountCode === code)
+    return [
+      ...partners.filter(p => p.accountCode === code),
+      ...subAccounts.filter(s => s.accountCode === code),
+    ]
   }
 
   const filteredJournals = currentFiscalYearId
