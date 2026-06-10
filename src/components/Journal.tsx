@@ -63,6 +63,9 @@ export default function JournalPage() {
   const [editTarget, setEditTarget] = useState<Journal | null>(null)
   const [form, setForm]             = useState<JournalForm>(emptyForm(currentFiscalYearId ?? 1))
   const [open, setOpen]             = useState(false)
+  // 検索条件
+  const [search, setSearch] = useState({ from: '', to: '', accountCode: '', keyword: '', minAmount: '', maxAmount: '' })
+  const [showSearch, setShowSearch] = useState(false)
 
   const getAccount     = (code: string) => accounts.find(a => a.code === code)
   // 補助科目名は取引先・汎用補助科目の両方から検索
@@ -83,9 +86,30 @@ export default function JournalPage() {
   const subKindLabel = (code: string) =>
     partners.some(p => p.code === code) ? '取引先' : subAccounts.some(s => s.code === code) ? '補助' : ''
 
-  const filteredJournals = currentFiscalYearId
+  const byFiscalYear = currentFiscalYearId
     ? journals.filter(j => j.fiscalYearId === currentFiscalYearId)
     : journals
+
+  const minA = search.minAmount ? Number(search.minAmount) : null
+  const maxA = search.maxAmount ? Number(search.maxAmount) : null
+  const kw   = search.keyword.trim().toLowerCase()
+  const hasFilter = search.from || search.to || search.accountCode || kw || minA !== null || maxA !== null
+
+  const filteredJournals = byFiscalYear.filter(j => {
+    if (search.from && j.date < search.from) return false
+    if (search.to   && j.date > search.to)   return false
+    if (search.accountCode && !j.lines.some(l => l.accountCode === search.accountCode)) return false
+    if (kw) {
+      const inMemo = j.memo.toLowerCase().includes(kw)
+      const inPartner = j.lines.some(l => l.partnerCode && getPartnerName(l.partnerCode).toLowerCase().includes(kw))
+      if (!inMemo && !inPartner) return false
+    }
+    if (minA !== null && !j.lines.some(l => l.amount >= minA)) return false
+    if (maxA !== null && !j.lines.some(l => l.amount <= maxA)) return false
+    return true
+  })
+
+  const clearSearch = () => setSearch({ from: '', to: '', accountCode: '', keyword: '', minAmount: '', maxAmount: '' })
 
   const flash = (msg: string) => { setAlertMsg(msg); setTimeout(() => setAlertMsg(null), 2500) }
 
@@ -158,12 +182,40 @@ export default function JournalPage() {
         <select value={currentFiscalYearId ?? ''} onChange={e => setCurrentFiscalYearId(Number(e.target.value))} style={{ fontSize: 13 }}>
           {fiscalYears.map(f => <option key={f.id} value={f.id}>{f.name}{f.closed ? '（締済）' : ''}</option>)}
         </select>
+        <button onClick={() => setShowSearch(s => !s)} style={{ fontSize: 13, position: 'relative' }}>
+          <i className="ti ti-search" /> 検索{hasFilter ? ` (${filteredJournals.length}件)` : ''}
+        </button>
         {!isClosed && <button className="primary" onClick={openNew}><i className="ti ti-plus" /> 新規仕訳</button>}
         {isClosed  && <span style={{ fontSize: 12, color: '#c0392b', marginLeft: 4 }}>この年度は締め済みです</span>}
       </div>
 
       <div className="content" style={{ overflow: 'auto' }}>
         {alertMsg && <div className="alert alert-success">{alertMsg}</div>}
+
+        {showSearch && (
+          <div style={{ background: '#faf8f3', border: '0.5px solid #e8e5dc', borderRadius: 8, padding: 12, marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+            <label style={{ fontSize: 12, color: '#555' }}>日付<br/>
+              <input type="date" value={search.from} onChange={e => setSearch(s => ({ ...s, from: e.target.value }))} style={{ fontSize: 12 }} />
+              <span style={{ margin: '0 4px' }}>〜</span>
+              <input type="date" value={search.to} onChange={e => setSearch(s => ({ ...s, to: e.target.value }))} style={{ fontSize: 12 }} />
+            </label>
+            <label style={{ fontSize: 12, color: '#555' }}>科目<br/>
+              <select value={search.accountCode} onChange={e => setSearch(s => ({ ...s, accountCode: e.target.value }))} style={{ fontSize: 12 }}>
+                <option value="">すべて</option>
+                {accounts.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 12, color: '#555' }}>金額<br/>
+              <input type="number" placeholder="最小" value={search.minAmount} onChange={e => setSearch(s => ({ ...s, minAmount: e.target.value }))} style={{ fontSize: 12, width: 80 }} />
+              <span style={{ margin: '0 4px' }}>〜</span>
+              <input type="number" placeholder="最大" value={search.maxAmount} onChange={e => setSearch(s => ({ ...s, maxAmount: e.target.value }))} style={{ fontSize: 12, width: 80 }} />
+            </label>
+            <label style={{ fontSize: 12, color: '#555', flex: 1, minWidth: 160 }}>摘要・取引先<br/>
+              <input type="text" placeholder="キーワード" value={search.keyword} onChange={e => setSearch(s => ({ ...s, keyword: e.target.value }))} style={{ fontSize: 12, width: '100%' }} />
+            </label>
+            <button onClick={clearSearch} style={{ fontSize: 12 }}><i className="ti ti-x" /> クリア</button>
+          </div>
+        )}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ minWidth: 900, whiteSpace: 'nowrap' }}>
             <thead>
@@ -182,7 +234,7 @@ export default function JournalPage() {
             </thead>
             <tbody>
               {filteredJournals.length === 0
-                ? <tr><td colSpan={10}><div className="empty-state"><i className="ti ti-notes-off" />仕訳がありません</div></td></tr>
+                ? <tr><td colSpan={10}><div className="empty-state"><i className="ti ti-notes-off" />{hasFilter ? '条件に一致する仕訳がありません' : '仕訳がありません'}</div></td></tr>
                 : filteredJournals.map(j => {
                   const debits  = j.lines.filter(l => l.side === 'debit')
                   const credits = j.lines.filter(l => l.side === 'credit')
