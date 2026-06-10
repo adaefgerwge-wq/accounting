@@ -1,6 +1,7 @@
 import { useApp } from './store'
 import Sidebar from './components/Sidebar'
 import Journal from './components/Journal'
+import Ledger from './components/Ledger'
 import Accounts from './components/Accounts'
 import Partners from './components/Partners'
 import SubAccounts from './components/SubAccounts'
@@ -22,6 +23,7 @@ export default function App() {
         {loading && <div style={{padding:16, color:'#888', fontSize:13}}>データを読み込んでいます...</div>}
         {error   && <div className="alert alert-error" style={{margin:16}}>APIに接続できません: {error}</div>}
         {currentPage === 'journal'       && <Journal />}
+        {currentPage === 'ledger'        && <Ledger />}
         {currentPage === 'trial-balance' && <TrialBalance />}
         {currentPage === 'invoices'      && <Invoices />}
         {currentPage === 'bank-import'    && <BankImport />}
