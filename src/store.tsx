@@ -30,7 +30,8 @@ interface AppActions {
   updateSubAccount: (index: number, s: SubAccount) => Promise<void>
   deleteSubAccount: (index: number) => Promise<void>
   addFiscalYear: (fy: Omit<FiscalYear,'id'|'closed'>) => Promise<void>
-  closeFiscalYear: (id: number) => Promise<void>
+  closeFiscalYear: (id: number) => Promise<string>
+  reopenFiscalYear: (id: number) => Promise<string>
   deleteFiscalYear: (id: number) => Promise<void>
   reload: () => Promise<void>
 }
@@ -99,7 +100,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteSubAccount = useCallback(async (i: number)                => setSubAccounts(await api.deleteSubAccount(subAccounts[i].code)), [subAccounts])
 
   const addFiscalYear   = useCallback(async (fy: Omit<FiscalYear,'id'|'closed'>) => setFiscalYears(await api.addFiscalYear(fy)), [])
-  const closeFiscalYear = useCallback(async (id: number) => setFiscalYears(await api.closeFiscalYear(id)), [])
+  // 決算処理：振替仕訳で残高・仕訳が変わるため全データを再読み込み
+  const closeFiscalYear = useCallback(async (id: number) => {
+    const res = await api.closeFiscalYear(id); await load(); return res.message
+  }, [load])
+  const reopenFiscalYear = useCallback(async (id: number) => {
+    const res = await api.reopenFiscalYear(id); await load(); return res.message
+  }, [load])
   const deleteFiscalYear= useCallback(async (id: number) => setFiscalYears(await api.deleteFiscalYear(id)), [])
 
   return (
@@ -111,7 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAccount, updateAccount, deleteAccount,
       addPartner, updatePartner, deletePartner,
       addSubAccount, updateSubAccount, deleteSubAccount,
-      addFiscalYear, closeFiscalYear, deleteFiscalYear,
+      addFiscalYear, closeFiscalYear, reopenFiscalYear, deleteFiscalYear,
     }}>
       {children}
     </AppContext.Provider>

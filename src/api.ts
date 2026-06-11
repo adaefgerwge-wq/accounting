@@ -43,7 +43,8 @@ export const api = {
   deleteSubAccount: (code: string)                => request<SubAccount[]>(`/sub-accounts/${encodeURIComponent(code)}`, { method:'DELETE' }),
 
   addFiscalYear:    (fy: Omit<FiscalYear,'id'|'closed'>) => request<FiscalYear[]>('/fiscal-years',               { method:'POST',   body: JSON.stringify(fy) }),
-  closeFiscalYear:  (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}/close`,   { method:'PUT' }),
+  closeFiscalYear:  (id: number)                         => request<{ message: string; fiscalYears: FiscalYear[] }>(`/fiscal-years/${id}/close`,  { method:'PUT' }),
+  reopenFiscalYear: (id: number)                         => request<{ message: string; fiscalYears: FiscalYear[] }>(`/fiscal-years/${id}/reopen`, { method:'PUT' }),
   deleteFiscalYear: (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}`,         { method:'DELETE' }),
 
   exportJournalsCsv:     (fiscalYearId?: number) => `${BASE}/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,

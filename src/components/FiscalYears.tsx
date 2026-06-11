@@ -7,7 +7,7 @@ type FYForm = Omit<FiscalYear, 'id' | 'closed'>
 const emptyForm = (): FYForm => ({ name: '', startDate: '', endDate: '' })
 
 export default function FiscalYearsPage() {
-  const { fiscalYears, addFiscalYear, closeFiscalYear, deleteFiscalYear } = useApp()
+  const { fiscalYears, addFiscalYear, closeFiscalYear, reopenFiscalYear, deleteFiscalYear } = useApp()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<FYForm>(emptyForm())
 
@@ -21,8 +21,14 @@ export default function FiscalYearsPage() {
   }
 
   const handleClose = async (fy: FiscalYear) => {
-    if (!confirm(`「${fy.name}」を締めますか？\n締め後は仕訳の追加・編集ができなくなります。`)) return
-    try { await closeFiscalYear(fy.id) }
+    if (!confirm(`「${fy.name}」の決算処理を行いますか？\n\n・収益と費用を集計し、当期純利益を利益剰余金へ振り替えます\n・資産/負債/純資産の残高は翌年度へ繰り越されます\n・締め後は仕訳の追加・編集ができなくなります`)) return
+    try { const msg = await closeFiscalYear(fy.id); alert(msg) }
+    catch (e) { alert(e instanceof Error ? e.message : '処理に失敗しました') }
+  }
+
+  const handleReopen = async (fy: FiscalYear) => {
+    if (!confirm(`「${fy.name}」の決算を取り消しますか？\n決算振替仕訳が削除され、締めが解除されます。`)) return
+    try { const msg = await reopenFiscalYear(fy.id); alert(msg) }
     catch (e) { alert(e instanceof Error ? e.message : '処理に失敗しました') }
   }
 
@@ -52,7 +58,8 @@ export default function FiscalYearsPage() {
                   : <span className="tag tag-revenue">進行中</span>}
                 </td>
                 <td><div className="actions-cell">
-                  {!fy.closed && <button className="icon-btn" onClick={() => handleClose(fy)} title="締める"><i className="ti ti-lock" /></button>}
+                  {!fy.closed && <button className="icon-btn" onClick={() => handleClose(fy)} title="決算処理して締める"><i className="ti ti-lock" /></button>}
+                  {fy.closed  && <button className="icon-btn" onClick={() => handleReopen(fy)} title="決算を取り消す"><i className="ti ti-lock-open" /></button>}
                   <button className="icon-btn danger" onClick={() => handleDelete(fy)} title="削除"><i className="ti ti-trash" /></button>
                 </div></td>
               </tr>
