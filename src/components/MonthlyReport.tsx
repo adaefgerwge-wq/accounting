@@ -126,7 +126,7 @@ export default function MonthlyReportPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={v => `¥${(v/10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(v: number) => fmt(v)} />
+                      <Tooltip formatter={(v) => fmt(Number(v))} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="収益" fill="#7F77DD" radius={[3,3,0,0]} />
                       <Bar dataKey="費用" fill="#F0A070" radius={[3,3,0,0]} />
@@ -138,7 +138,7 @@ export default function MonthlyReportPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={v => `¥${(v/10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(v: number) => fmt(v)} />
+                      <Tooltip formatter={(v) => fmt(Number(v))} />
                       <Line dataKey="利益" stroke="#7F77DD" strokeWidth={2} dot={{ r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -188,7 +188,7 @@ export default function MonthlyReportPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={v => `¥${(v/10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Tooltip formatter={(v) => fmt(Number(v))} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {names.map((name, i) => <Bar key={name} dataKey={name} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === names.length-1 ? [3,3,0,0] : [0,0,0,0]} />)}
                 </BarChart>
@@ -205,7 +205,7 @@ export default function MonthlyReportPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0ede6" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={v => `¥${(v/10000).toFixed(0)}万`} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => fmt(v)} />
+                  <Tooltip formatter={(v) => fmt(Number(v))} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   {names.map((name, i) => <Bar key={name} dataKey={name} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === names.length-1 ? [3,3,0,0] : [0,0,0,0]} />)}
                 </BarChart>

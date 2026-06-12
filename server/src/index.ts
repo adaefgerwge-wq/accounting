@@ -20,7 +20,17 @@ import { ensureSchema, seedIfEmpty, ensureInvoiceSchema } from './schema.js'
 const port = Number(process.env.PORT ?? 3001)
 const app = express()
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173' }))
+// CLIENT_ORIGIN はカンマ区切りで複数指定可（本番フロント＋ローカル）。
+// 未設定ならローカル開発用のみ許可。
+const allowedOrigins = (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean)
+app.use(cors({
+  origin: (origin, callback) => {
+    // 同一オリジン/サーバー間リクエスト(originなし)は許可
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    callback(new Error(`Not allowed by CORS: ${origin}`))
+  },
+}))
 app.use(express.json({ limit: '50mb' }))
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
