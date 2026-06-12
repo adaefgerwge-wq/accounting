@@ -94,10 +94,21 @@ async function validateJournalInput(body: any, fiscalYearId: number, date: strin
   const codes = [...new Set(lines.map((l: any) => l.accountCode as string))]
   const [accRows] = await pool.query('SELECT code, name, has_sub FROM accounts WHERE code IN (?)', [codes]) as any
   const accMap = new Map<string, any>(accRows.map((a: any) => [a.code, a]))
+  // 補助科目の候補（取引先＋汎用補助科目）が存在する科目コードの集合
+  const [subRows] = codes.length
+    ? await pool.query(
+        'SELECT account_code FROM partners WHERE account_code IN (?) UNION SELECT account_code FROM sub_accounts WHERE account_code IN (?)',
+        [codes, codes]
+      ) as any
+    : [[]]
+  const hasCandidates = new Set<string>((subRows as any[]).map((r: any) => r.account_code))
   for (const l of lines) {
     if (!accMap.has(l.accountCode)) { errors.push(`科目コード ${l.accountCode} が見つかりません`); continue }
     const acc = accMap.get(l.accountCode)!
-    if (acc.has_sub && !l.partnerCode) errors.push(`${acc.name}の取引先を指定してください`)
+    // 候補が1件以上ある場合のみ補助科目を必須にする（候補ゼロなら任意）
+    if (acc.has_sub && hasCandidates.has(l.accountCode) && !l.partnerCode) {
+      errors.push(`${acc.name}の補助科目（取引先）を指定してください`)
+    }
   }
 
   if (fiscalYearId) {
