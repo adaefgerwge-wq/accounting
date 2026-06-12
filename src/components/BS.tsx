@@ -1,5 +1,11 @@
 import { useApp } from '../store'
-import type { Account } from '../types'
+import type { Account, AccountType } from '../types'
+
+// 正常残高側を正とする符号（資産・費用は借方が＋、それ以外は貸方が＋）
+function balanceSign(type: AccountType, side: 'debit' | 'credit'): 1 | -1 {
+  const debitNormal = type === 'asset' || type === 'expense'
+  return (side === 'debit') === debitNormal ? 1 : -1
+}
 
 function Section({ title, items, total, journals, partners }: {
   title: string
@@ -25,7 +31,7 @@ function Section({ title, items, total, journals, partners }: {
             {subs.map(p => {
               const bal = journals.flatMap(j => j.lines)
                 .filter(l => l.accountCode === a.code && l.partnerCode === p.code)
-                .reduce((s, l) => s + l.amount, 0)
+                .reduce((s, l) => s + l.amount * balanceSign(a.type, l.side), 0)
               return (
                 <div key={p.code} className="fs-row indent">
                   <span>└ {p.name}</span>
