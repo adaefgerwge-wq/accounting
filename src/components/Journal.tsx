@@ -321,7 +321,7 @@ export default function JournalPage() {
                 <tr style={{ background: '#fafaf7' }}>
                   <th style={{ padding: '6px 8px', textAlign: 'left', width: 60 }}>記入側</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', minWidth: 140 }}>科目</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 100 }}>補助</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'left', width: 150 }}>補助</th>
                   <th style={{ padding: '6px 8px', textAlign: 'right', width: 110 }}>金額</th>
                   <th style={{ padding: '6px 8px', textAlign: 'left', width: 110 }}>消費税</th>
                   <th style={{ width: 28 }} />
@@ -373,7 +373,7 @@ export default function JournalPage() {
                       </td>
                       <td style={{ padding: '4px 6px' }}>
                         {l.partnerCode && (
-                          <span className="partner-chip" style={{ fontSize: 11 }}>
+                          <span className="partner-chip" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                             <span style={{ opacity: 0.6, marginRight: 3 }}>{subKindLabel(l.partnerCode)}:</span>
                             {getPartnerName(l.partnerCode)}
                           </span>
