@@ -1,6 +1,9 @@
 import type { Account, Journal, Partner, SubAccount, FiscalYear } from './types'
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
+// APIのベースURL。本番では VITE_API_BASE_URL（例: https://xxx/api）、
+// ローカルでは Vite プロキシ経由の '/api'。直接 fetch する箇所でも使う。
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const BASE = API_BASE
 
 export interface AppData {
   accounts: Account[]
