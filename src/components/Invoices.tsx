@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../store'
+import { API_BASE } from '../api'
 import Modal from './Modal'
 
 // ローカルタイムゾーン基準の日付（YYYY-MM-DD）。toISOString()のUTCずれを防ぐ。
@@ -40,7 +41,7 @@ export default function InvoicesPage() {
   const [previewId, setPreview] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch('/api/invoices').then(r => r.json()).then(setInvoices)
+    fetch(`${API_BASE}/invoices`).then(r => r.json()).then(setInvoices)
   }, [])
 
   const openNew = () => { setForm(emptyInvoice()); setEdit(null); setOpen(true) }
@@ -64,8 +65,8 @@ export default function InvoicesPage() {
   const handleSubmit = async () => {
     if (!form.partnerName || !form.items.length) { alert('取引先と明細を入力してください'); return }
     const res = editTarget
-      ? await fetch(`/api/invoices/${editTarget.id}`, { method:'PUT',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(form) })
-      : await fetch('/api/invoices',                  { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(form) })
+      ? await fetch(`${API_BASE}/invoices/${editTarget.id}`, { method:'PUT',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(form) })
+      : await fetch(`${API_BASE}/invoices`,                  { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(form) })
     if (!res.ok) { alert('保存に失敗しました'); return }
     const saved = await res.json()
     setInvoices(prev => editTarget ? prev.map(x => x.id===editTarget.id ? saved : x) : [saved, ...prev])
@@ -74,12 +75,12 @@ export default function InvoicesPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('削除しますか？')) return
-    await fetch(`/api/invoices/${id}`, { method:'DELETE' })
+    await fetch(`${API_BASE}/invoices/${id}`, { method:'DELETE' })
     setInvoices(prev => prev.filter(x => x.id !== id))
   }
 
   const handleStatus = async (id: number, status: string) => {
-    await fetch(`/api/invoices/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) })
+    await fetch(`${API_BASE}/invoices/${id}/status`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status }) })
     setInvoices(prev => prev.map(x => x.id===id ? { ...x, status: status as Invoice['status'] } : x))
   }
 

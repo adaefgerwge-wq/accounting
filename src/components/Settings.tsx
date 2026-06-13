@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { useApp } from '../store'
-import { api } from '../api'
+import { api, API_BASE } from '../api'
 
 export default function SettingsPage() {
   const { reload, currentFiscalYearId } = useApp()
@@ -12,14 +12,14 @@ export default function SettingsPage() {
   const [recalculating, setRecalculating] = useState(false)
 
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(s => {
+    fetch(`${API_BASE}/settings`).then(r => r.json()).then(s => {
       if (s.tax_method) setTaxMethod(s.tax_method)
     })
   }, [])
 
   const handleTaxMethodChange = async (method: 'inclusive'|'exclusive') => {
     setTaxSaving(true)
-    await fetch('/api/settings/tax_method', {
+    await fetch(`${API_BASE}/settings/tax_method`, {
       method: 'PUT', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ value: method })
     })
@@ -32,7 +32,7 @@ export default function SettingsPage() {
     setRecalculating(true)
     setRecalcMsg(null)
     try {
-      const res = await fetch('/api/recalculate', { method: 'POST' })
+      const res = await fetch(`${API_BASE}/recalculate`, { method: 'POST' })
       const data = await res.json()
       await reload()
       setRecalcMsg({ type: 'success', text: data.message })

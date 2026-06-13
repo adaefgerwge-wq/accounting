@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../store'
+import { API_BASE } from '../api'
 import Modal from './Modal'
 import Papa from 'papaparse'
 
@@ -17,7 +18,7 @@ export default function BankImportPage() {
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { fetch('/api/bank-rules').then(r => r.json()).then(setRules) }, [])
+  useEffect(() => { fetch(`${API_BASE}/bank-rules`).then(r => r.json()).then(setRules) }, [])
 
   const getAccountName = (code: string) => accounts.find(a => a.code === code)?.name ?? code
 
@@ -37,7 +38,7 @@ export default function BankImportPage() {
           return { date: row[dateKey]?.trim() ?? '', amount: parseInt(rawAmt) || 0, description: row[descKey]?.trim() ?? '' }
         }).filter(r => r.date && r.amount)
 
-        const res = await fetch('/api/bank-rules/match', {
+        const res = await fetch(`${API_BASE}/bank-rules/match`, {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ rows: raw, fiscalYearId: currentFiscalYearId ?? 1 })
         })
@@ -73,14 +74,14 @@ export default function BankImportPage() {
   const handleRuleSubmit = async () => {
     if (!ruleForm.name || !ruleForm.keyword || !ruleForm.debitCode || !ruleForm.creditCode) { alert('全項目を入力してください'); return }
     const res = editRule
-      ? await fetch(`/api/bank-rules/${editRule.id}`, { method:'PUT',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(ruleForm) })
-      : await fetch('/api/bank-rules',                 { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ruleForm) })
+      ? await fetch(`${API_BASE}/bank-rules/${editRule.id}`, { method:'PUT',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(ruleForm) })
+      : await fetch(`${API_BASE}/bank-rules`,                 { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ruleForm) })
     setRules(await res.json())
     setRuleOpen(false)
   }
   const handleRuleDelete = async (id: number) => {
     if (!confirm('削除しますか？')) return
-    const res = await fetch(`/api/bank-rules/${id}`, { method:'DELETE' })
+    const res = await fetch(`${API_BASE}/bank-rules/${id}`, { method:'DELETE' })
     setRules(await res.json())
   }
   const openNewRule = () => { setRuleForm({ name:'', keyword:'', debitCode:'', creditCode:'', memoTpl:'{description}', priority:0 }); setEditRule(null); setRuleOpen(true) }
