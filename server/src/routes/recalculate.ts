@@ -41,6 +41,10 @@ recalculateRouter.post('/', async (_req, res, next) => {
         linesByJournal.get(r.journal_id)!.push(r)
       }
 
+      // 全仕訳ぶんの新明細と残高差分をメモリに溜め、最後に一括反映する
+      const allNewLines: any[] = []
+      const balanceDeltas = new Map<string, number>()
+
       for (const jr of jRows) {
         const rawLines: any[] = linesByJournal.get(jr.id) ?? []
 
@@ -99,20 +103,26 @@ recalculateRouter.post('/', async (_req, res, next) => {
           })
         }
 
-        // journal_lines を差し替え
-        await conn.query('DELETE FROM journal_lines WHERE journal_id = ?', [jr.id])
-        if (finalLines.length) {
-          await conn.query(
-            'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
-            [finalLines.map(l => [jr.id, l.side, l.accountCode, l.partnerCode, l.amount, l.taxType])]
-          )
-        }
-
-        // 残高更新
+        // この仕訳の新明細と残高差分を蓄積（個別クエリは投げない）
         for (const l of finalLines) {
+          allNewLines.push([jr.id, l.side, l.accountCode, l.partnerCode, l.amount, l.taxType])
           const delta = l.amount * balanceSign(typeOf.get(l.accountCode), l.side)
-          await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [delta, l.accountCode])
+          balanceDeltas.set(l.accountCode, (balanceDeltas.get(l.accountCode) ?? 0) + delta)
         }
+      }
+
+      // 全明細を一括で差し替え（DELETE/INSERTを各1回に）
+      const allIds = jRows.map((r: any) => r.id)
+      await conn.query('DELETE FROM journal_lines WHERE journal_id IN (?)', [allIds])
+      if (allNewLines.length) {
+        await conn.query(
+          'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
+          [allNewLines]
+        )
+      }
+      // 残高は科目ごとに1回だけUPDATE
+      for (const [code, delta] of balanceDeltas) {
+        await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [delta, code])
       }
     }
 
