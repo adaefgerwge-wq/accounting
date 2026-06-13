@@ -154,8 +154,11 @@ async function backfillTaxDefaults() {
 }
 
 export async function seedIfEmpty() {
-  const [accountRows] = await pool.query('SELECT COUNT(*) AS count FROM accounts')
-  const [{ count }] = accountRows as [{ count: number }]
+  // 初期化済み判定は会計年度の有無で行う。
+  // accounts は backfillTaxDefaults が消費税科目を先に入れるため、件数で判定すると
+  // 新規DBでも「初期化済み」と誤判定してしまう。
+  const [fyRows] = await pool.query('SELECT COUNT(*) AS count FROM fiscal_years')
+  const [{ count }] = fyRows as [{ count: number }]
   if (count > 0) return
 
   const connection = await pool.getConnection()
@@ -167,8 +170,9 @@ export async function seedIfEmpty() {
       'INSERT INTO fiscal_years (id, name, start_date, end_date) VALUES (1, ?, ?, ?)',
       [`${currentYear}年度`, `${currentYear}-01-01`, `${currentYear}-12-31`]
     )
+    // backfillTaxDefaults が先に入れた消費税科目(1150/2050)と衝突しないよう IGNORE
     await connection.query(
-      'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
+      'INSERT IGNORE INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
       [initialAccounts.map(a => [a.code, a.name, a.type, a.balance, a.hasSub, a.defaultTaxType ?? 'none'])]
     )
     await connection.query(
