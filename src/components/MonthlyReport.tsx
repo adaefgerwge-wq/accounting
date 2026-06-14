@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../store'
-import { API_BASE } from '../api'
+import { authFetch } from '../api'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
@@ -37,8 +37,8 @@ export default function MonthlyReportPage() {
     if (!currentFiscalYearId) return
     setLoading(true)
     Promise.all([
-      fetch(`${API_BASE}/report/monthly?fiscalYearId=${currentFiscalYearId}`).then(r => r.json()),
-      fetch(`${API_BASE}/report/monthly-accounts?fiscalYearId=${currentFiscalYearId}`).then(r => r.json()),
+      authFetch(`/report/monthly?fiscalYearId=${currentFiscalYearId}`).then(r => r.json()),
+      authFetch(`/report/monthly-accounts?fiscalYearId=${currentFiscalYearId}`).then(r => r.json()),
     ]).then(([m, a]) => {
       setMonthly(m)
       setAccounts(a)

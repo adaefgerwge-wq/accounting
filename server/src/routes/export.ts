@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
-import { mapAccount, mapJournal, mapJournalLine } from '../mappers.js'
+import { mapAccount } from '../mappers.js'
 import { balanceSign } from '../balance.js'
 
 export const exportRouter = Router()
@@ -13,14 +13,15 @@ const TAX_LABELS: Record<string, string> = {
 exportRouter.get('/journals.csv', async (req, res, next) => {
   try {
     const { fiscalYearId } = req.query
-    const where = fiscalYearId ? 'WHERE fiscal_year_id = ?' : ''
-    const params = fiscalYearId ? [fiscalYearId] : []
-    const [jRows] = await pool.query(`SELECT * FROM journals ${where} ORDER BY date, id`, params) as any
+    const conds = ['user_id = ?']
+    const params: any[] = [req.userId]
+    if (fiscalYearId) { conds.push('fiscal_year_id = ?'); params.push(fiscalYearId) }
+    const [jRows] = await pool.query(`SELECT * FROM journals WHERE ${conds.join(' AND ')} ORDER BY date, id`, params) as any
 
-    const [accRows] = await pool.query('SELECT * FROM accounts ORDER BY code') as any
+    const [accRows] = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [req.userId]) as any
     const accounts = accRows.map(mapAccount)
     const accMap = new Map(accounts.map((a: any) => [a.code, a.name]))
-    const [partRows] = await pool.query('SELECT code, name FROM partners') as any
+    const [partRows] = await pool.query('SELECT code, name FROM partners WHERE user_id = ?', [req.userId]) as any
     const partMap = new Map((partRows as any[]).map((p: any) => [p.code, p.name]))
 
     const lines: string[] = []
@@ -79,7 +80,7 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
     let endDate: string | null = null
     let periodLabel = '全期間'
     if (fiscalYearId) {
-      const [fyRows] = await pool.query('SELECT * FROM fiscal_years WHERE id = ?', [fiscalYearId]) as any
+      const [fyRows] = await pool.query('SELECT * FROM fiscal_years WHERE id = ? AND user_id = ?', [fiscalYearId, req.userId]) as any
       if (fyRows[0]) {
         startDate = String(fyRows[0].start_date).slice(0,10)
         endDate   = String(fyRows[0].end_date).slice(0,10)
@@ -87,16 +88,17 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
       }
     }
 
-    const [accRows] = await pool.query('SELECT * FROM accounts ORDER BY code') as any
+    const [accRows] = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [req.userId]) as any
     const accounts = accRows.map(mapAccount)
     const typeOf = new Map<string, string>(accounts.map((a: any) => [a.code, a.type]))
 
-    // 全仕訳明細を日付付きで取得
+    // 全仕訳明細を日付付きで取得（このユーザー分）
     const [lineRows] = await pool.query(`
       SELECT jl.account_code, jl.side, jl.amount, j.date
       FROM journal_lines jl
       JOIN journals j ON jl.journal_id = j.id
-    `) as any
+      WHERE j.user_id = ?
+    `, [req.userId]) as any
 
     // 科目ごとに 期首残高(符号付)・期中借方・期中貸方・期末残高(符号付) を集計
     type Agg = { openingSigned: number; periodDebit: number; periodCredit: number; closingSigned: number }
@@ -161,13 +163,13 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
 })
 
 // バックアップ：全データをJSON出力（journals に lines をネスト）
-exportRouter.get('/backup.json', async (_req, res, next) => {
+exportRouter.get('/backup.json', async (req, res, next) => {
   try {
-    const [accounts]    = await pool.query('SELECT * FROM accounts ORDER BY code') as any
-    const [partners]    = await pool.query('SELECT * FROM partners ORDER BY code') as any
-    const [subAccounts] = await pool.query('SELECT * FROM sub_accounts ORDER BY account_code, code') as any
-    const [jRows]       = await pool.query('SELECT * FROM journals ORDER BY date, id') as any
-    const [fiscalYears] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date') as any
+    const [accounts]    = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [req.userId]) as any
+    const [partners]    = await pool.query('SELECT * FROM partners WHERE user_id = ? ORDER BY code', [req.userId]) as any
+    const [subAccounts] = await pool.query('SELECT * FROM sub_accounts WHERE user_id = ? ORDER BY account_code, code', [req.userId]) as any
+    const [jRows]       = await pool.query('SELECT * FROM journals WHERE user_id = ? ORDER BY date, id', [req.userId]) as any
+    const [fiscalYears] = await pool.query('SELECT * FROM fiscal_years WHERE user_id = ? ORDER BY start_date', [req.userId]) as any
 
     let journals: any[] = []
     if (jRows.length) {

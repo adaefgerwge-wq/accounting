@@ -1,4 +1,5 @@
 import { useApp } from '../store'
+import { useAuth } from '../auth'
 import type { PageId } from '../types'
 
 const NAV: { section: string; items: { id: PageId; icon: string; label: string }[] }[] = [
@@ -27,6 +28,7 @@ const NAV: { section: string; items: { id: PageId; icon: string; label: string }
 
 export default function Sidebar() {
   const { currentPage, setPage } = useApp()
+  const { user, logout } = useAuth()
   return (
     <div className="sidebar">
       <div className="sidebar-logo"><i className="ti ti-calculator" />会計ソフト</div>
@@ -40,6 +42,17 @@ export default function Sidebar() {
           ))}
         </div>
       ))}
+      <div style={{ marginTop: 'auto', padding: '10px 14px', borderTop: '0.5px solid #e8e5dc' }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <i className="ti ti-user" style={{ marginRight: 4 }} />{user?.name || user?.email}
+        </div>
+        <div
+          onClick={logout}
+          style={{ fontSize: 12, color: '#c0392b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          <i className="ti ti-logout" />ログアウト
+        </div>
+      </div>
     </div>
   )
 }

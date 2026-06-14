@@ -8,40 +8,52 @@ restoreRouter.post('/', async (req, res, next) => {
   if (!accounts || !partners || !journals || !fiscalYears) {
     res.status(400).json({ message: 'バックアップデータが不正です' }); return
   }
+  const uid = req.userId
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
-    await conn.query('SET FOREIGN_KEY_CHECKS = 0')
-    await conn.query('TRUNCATE TABLE journal_lines')
-    await conn.query('TRUNCATE TABLE journals')
-    await conn.query('TRUNCATE TABLE partners')
-    await conn.query('TRUNCATE TABLE sub_accounts').catch(() => {})
-    await conn.query('TRUNCATE TABLE accounts')
-    await conn.query('TRUNCATE TABLE fiscal_years')
-    await conn.query('SET FOREIGN_KEY_CHECKS = 1')
 
-    if (fiscalYears.length) await conn.query(
-      'INSERT INTO fiscal_years (id, name, start_date, end_date, closed) VALUES ?',
-      [fiscalYears.map((f: any) => [f.id, f.name, f.start_date, f.end_date, f.closed])]
-    )
+    // このユーザーの既存データのみ削除（他ユーザーには影響させない）
+    await conn.query('DELETE FROM journal_lines WHERE journal_id IN (SELECT id FROM journals WHERE user_id = ?)', [uid])
+    await conn.query('DELETE FROM journals WHERE user_id = ?', [uid])
+    await conn.query('DELETE FROM partners WHERE user_id = ?', [uid])
+    await conn.query('DELETE FROM sub_accounts WHERE user_id = ?', [uid])
+    await conn.query('DELETE FROM accounts WHERE user_id = ?', [uid])
+    await conn.query('DELETE FROM fiscal_years WHERE user_id = ?', [uid])
+
+    // 会計年度：id はグローバルなので再採番し、旧id→新id を対応付ける
+    const fyIdMap = new Map<number, number>()
+    let firstNewFyId: number | undefined
+    for (const f of fiscalYears) {
+      const [r] = await conn.query(
+        'INSERT INTO fiscal_years (user_id, name, start_date, end_date, closed) VALUES (?,?,?,?,?)',
+        [uid, f.name, f.start_date, f.end_date, f.closed ?? 0]
+      ) as any
+      fyIdMap.set(f.id, r.insertId)
+      if (firstNewFyId === undefined) firstNewFyId = r.insertId
+    }
+
     if (accounts.length) await conn.query(
-      'INSERT INTO accounts (code, name, type, balance, has_sub, default_tax_type) VALUES ?',
-      [accounts.map((a: any) => [a.code, a.name, a.type, a.balance, a.has_sub, a.default_tax_type ?? 'none'])]
+      'INSERT INTO accounts (user_id, code, name, type, balance, has_sub, default_tax_type) VALUES ?',
+      [accounts.map((a: any) => [uid, a.code, a.name, a.type, a.balance, a.has_sub, a.default_tax_type ?? 'none'])]
     )
     if (partners.length) await conn.query(
-      'INSERT INTO partners (code, name, type, account_code) VALUES ?',
-      [partners.map((p: any) => [p.code, p.name, p.type, p.account_code])]
+      'INSERT INTO partners (user_id, code, name, type, account_code) VALUES ?',
+      [partners.map((p: any) => [uid, p.code, p.name, p.type, p.account_code])]
     )
     if (subAccounts?.length) await conn.query(
-      'INSERT INTO sub_accounts (code, name, account_code) VALUES ?',
-      [subAccounts.map((s: any) => [s.code, s.name, s.account_code ?? s.accountCode])]
+      'INSERT INTO sub_accounts (user_id, code, name, account_code) VALUES ?',
+      [subAccounts.map((s: any) => [uid, s.code, s.name, s.account_code ?? s.accountCode])]
     )
-    // journals はネスト形式（lines を含む）または旧形式（debit/credit/amount）に対応
+
+    // journals はネスト形式（lines を含む）または旧形式（debit/credit/amount）に対応。id は再採番。
     for (const j of journals) {
-      await conn.query(
-        'INSERT INTO journals (id, fiscal_year_id, date, memo) VALUES (?,?,?,?)',
-        [j.id, j.fiscal_year_id ?? 1, j.date, j.memo ?? '']
-      )
+      const newFyId = fyIdMap.get(j.fiscal_year_id) ?? firstNewFyId ?? j.fiscal_year_id ?? 1
+      const [r] = await conn.query(
+        'INSERT INTO journals (user_id, fiscal_year_id, date, memo) VALUES (?,?,?,?)',
+        [uid, newFyId, j.date, j.memo ?? '']
+      ) as any
+      const newJid = r.insertId
       const lines: any[] = j.lines ?? []
       // 旧形式のバックアップ（lines がない場合）は debit/credit/amount から変換
       if (!lines.length && j.debit) {
@@ -50,7 +62,7 @@ restoreRouter.post('/', async (req, res, next) => {
       }
       if (lines.length) await conn.query(
         'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
-        [lines.map((l: any) => [j.id, l.side, l.account_code ?? l.accountCode, l.partner_code ?? l.partnerCode ?? '', l.amount, l.tax_type ?? l.taxType ?? 'none'])]
+        [lines.map((l: any) => [newJid, l.side, l.account_code ?? l.accountCode, l.partner_code ?? l.partnerCode ?? '', l.amount, l.tax_type ?? l.taxType ?? 'none'])]
       )
     }
 

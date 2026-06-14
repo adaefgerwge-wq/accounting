@@ -9,19 +9,20 @@ export const recalculateRouter = Router()
 
 const TAX_CODES = new Set([TAX_DEBIT_CODE, TAX_CREDIT_CODE])
 
-recalculateRouter.post('/', async (_req, res, next) => {
+recalculateRouter.post('/', async (req, res, next) => {
+  const userId = req.userId
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
 
     // 経理方式を取得
-    const [settingRows] = await conn.query("SELECT value FROM settings WHERE key_name = 'tax_method'") as any
+    const [settingRows] = await conn.query("SELECT value FROM settings WHERE key_name = 'tax_method' AND user_id = ?", [userId]) as any
     const taxMethod: 'inclusive' | 'exclusive' = settingRows[0]?.value === 'exclusive' ? 'exclusive' : 'inclusive'
 
-    // 全残高リセット
-    await conn.query('UPDATE accounts SET balance = 0')
+    // 全残高リセット（このユーザー分）
+    await conn.query('UPDATE accounts SET balance = 0 WHERE user_id = ?', [userId])
 
-    const [jRows] = await conn.query('SELECT * FROM journals ORDER BY date, id') as any
+    const [jRows] = await conn.query('SELECT * FROM journals WHERE user_id = ? ORDER BY date, id', [userId]) as any
     if (jRows.length) {
       const ids = jRows.map((r: any) => r.id)
       const [lRows] = await conn.query('SELECT * FROM journal_lines WHERE journal_id IN (?) ORDER BY id', [ids]) as any
@@ -31,7 +32,7 @@ recalculateRouter.post('/', async (_req, res, next) => {
       typeOf.set(TAX_DEBIT_CODE, 'asset')
       typeOf.set(TAX_CREDIT_CODE, 'liability')
       if (allCodes.length) {
-        const [accRows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?)', [allCodes]) as any
+        const [accRows] = await conn.query('SELECT code, type FROM accounts WHERE code IN (?) AND user_id = ?', [allCodes, userId]) as any
         for (const r of accRows) typeOf.set(r.code, r.type)
       }
 
@@ -122,15 +123,15 @@ recalculateRouter.post('/', async (_req, res, next) => {
       }
       // 残高は科目ごとに1回だけUPDATE
       for (const [code, delta] of balanceDeltas) {
-        await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ?', [delta, code])
+        await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ? AND user_id = ?', [delta, code, userId])
       }
     }
 
     await conn.commit()
 
     // レスポンス用に最新データ取得
-    const [accountRows] = await pool.query('SELECT * FROM accounts ORDER BY code') as any
-    const [allJRows] = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
+    const [accountRows] = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [userId]) as any
+    const [allJRows] = await pool.query('SELECT * FROM journals WHERE user_id = ? ORDER BY date DESC, id DESC', [userId]) as any
     const journals = []
     if (allJRows.length) {
       const ids = allJRows.map((r: any) => r.id)

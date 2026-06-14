@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { useApp } from '../store'
-import { api, API_BASE } from '../api'
+import { api, authFetch } from '../api'
 
 export default function SettingsPage() {
   const { reload, currentFiscalYearId } = useApp()
@@ -12,15 +12,23 @@ export default function SettingsPage() {
   const [recalculating, setRecalculating] = useState(false)
 
   useEffect(() => {
-    fetch(`${API_BASE}/settings`).then(r => r.json()).then(s => {
+    authFetch('/settings').then(r => r.json()).then(s => {
       if (s.tax_method) setTaxMethod(s.tax_method)
     })
   }, [])
 
+  const handleDownload = async (path: string, filename: string) => {
+    try {
+      await api.download(path, filename)
+    } catch (err) {
+      setRestoreMsg({ type: 'error', text: err instanceof Error ? err.message : 'ダウンロードに失敗しました' })
+    }
+  }
+
   const handleTaxMethodChange = async (method: 'inclusive'|'exclusive') => {
     setTaxSaving(true)
-    await fetch(`${API_BASE}/settings/tax_method`, {
-      method: 'PUT', headers: {'Content-Type':'application/json'},
+    await authFetch('/settings/tax_method', {
+      method: 'PUT',
       body: JSON.stringify({ value: method })
     })
     setTaxMethod(method)
@@ -32,7 +40,7 @@ export default function SettingsPage() {
     setRecalculating(true)
     setRecalcMsg(null)
     try {
-      const res = await fetch(`${API_BASE}/recalculate`, { method: 'POST' })
+      const res = await authFetch('/recalculate', { method: 'POST' })
       const data = await res.json()
       await reload()
       setRecalcMsg({ type: 'success', text: data.message })
@@ -131,27 +139,27 @@ export default function SettingsPage() {
                 <div style={{fontWeight:500, fontSize:13}}>仕訳帳 CSV（今期）</div>
                 <div style={{fontSize:12, color:'#888'}}>現在の会計年度の仕訳を出力</div>
               </div>
-              <a href={api.exportJournalsCsv(currentFiscalYearId ?? undefined)} download>
-                <button><i className="ti ti-file-spreadsheet" /> ダウンロード</button>
-              </a>
+              <button onClick={() => handleDownload(api.exportJournalsCsv(currentFiscalYearId ?? undefined), 'journals.csv')}>
+                <i className="ti ti-file-spreadsheet" /> ダウンロード
+              </button>
             </div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
               <div>
                 <div style={{fontWeight:500, fontSize:13}}>仕訳帳 CSV（全期間）</div>
                 <div style={{fontSize:12, color:'#888'}}>全会計年度の仕訳を出力</div>
               </div>
-              <a href={api.exportJournalsCsv()} download>
-                <button><i className="ti ti-file-spreadsheet" /> ダウンロード</button>
-              </a>
+              <button onClick={() => handleDownload(api.exportJournalsCsv(), 'journals-all.csv')}>
+                <i className="ti ti-file-spreadsheet" /> ダウンロード
+              </button>
             </div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
               <div>
                 <div style={{fontWeight:500, fontSize:13}}>試算表 CSV</div>
                 <div style={{fontSize:12, color:'#888'}}>勘定科目の残高一覧を出力</div>
               </div>
-              <a href={api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined)} download>
-                <button><i className="ti ti-file-spreadsheet" /> ダウンロード</button>
-              </a>
+              <button onClick={() => handleDownload(api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined), 'trial-balance.csv')}>
+                <i className="ti ti-file-spreadsheet" /> ダウンロード
+              </button>
             </div>
           </div>
         </div>
@@ -166,9 +174,9 @@ export default function SettingsPage() {
                 <div style={{fontWeight:500, fontSize:13}}>バックアップ（JSON）</div>
                 <div style={{fontSize:12, color:'#888'}}>全データをJSONファイルとして保存</div>
               </div>
-              <a href={api.exportBackup()} download>
-                <button className="primary"><i className="ti ti-cloud-download" /> バックアップ</button>
-              </a>
+              <button className="primary" onClick={() => handleDownload(api.exportBackup(), `accounting-backup-${new Date().toISOString().slice(0,10)}.json`)}>
+                <i className="ti ti-cloud-download" /> バックアップ
+              </button>
             </div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
               <div>
