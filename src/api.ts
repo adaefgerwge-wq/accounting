@@ -5,6 +5,59 @@ import type { Account, Journal, Partner, SubAccount, FiscalYear } from './types'
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const BASE = API_BASE
 
+export interface AuthUser { id: number; email: string; name: string }
+export interface AuthResult { token: string; user: AuthUser }
+
+// ── 認証トークン管理 ──
+let authToken: string | null = null
+let onUnauthorized: (() => void) | null = null
+
+export function setAuthToken(token: string | null) { authToken = token }
+export function setOnUnauthorized(handler: (() => void) | null) { onUnauthorized = handler }
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  return {
+    'Content-Type': 'application/json',
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    ...extra,
+  }
+}
+
+// 認証ヘッダ付き fetch（生の Response を返す。直書き fetch の置き換え用）
+export async function authFetch(path: string, options?: RequestInit): Promise<Response> {
+  const res = await fetch(`${BASE}${path}`, { ...options, headers: authHeaders(options?.headers) })
+  // 認証済みのはずが 401 → セッション切れ。ログアウトさせる（認証エンドポイントは除く）
+  if (res.status === 401 && authToken && !path.startsWith('/auth')) onUnauthorized?.()
+  return res
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await authFetch(path, options)
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.message ?? `API error: ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
+// 認証付きでファイルをダウンロード（href では Authorization を載せられないため blob 経由）
+export async function download(path: string, filename: string): Promise<void> {
+  const res = await authFetch(path)
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.message ?? `ダウンロードに失敗しました: ${res.status}`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 export interface AppData {
   accounts: Account[]
   partners: Partner[]
@@ -14,19 +67,14 @@ export interface AppData {
 }
 export interface JournalState { accounts: Account[]; journals: Journal[] }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers }
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    throw new Error(body?.message ?? `API error: ${res.status}`)
-  }
-  return res.json() as Promise<T>
-}
-
 export const api = {
+  // ── 認証 ──
+  register: (email: string, password: string, name: string) =>
+    request<AuthResult>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) }),
+  login: (email: string, password: string) =>
+    request<AuthResult>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  me: () => request<{ user: AuthUser }>('/auth/me'),
+
   getState: () => request<AppData>('/state'),
 
   addJournal:    (j: Omit<Journal,'id'>)  => request<JournalState>('/journals',         { method:'POST',   body: JSON.stringify(j) }),
@@ -50,9 +98,11 @@ export const api = {
   reopenFiscalYear: (id: number)                         => request<{ message: string; fiscalYears: FiscalYear[] }>(`/fiscal-years/${id}/reopen`, { method:'PUT' }),
   deleteFiscalYear: (id: number)                         => request<FiscalYear[]>(`/fiscal-years/${id}`,         { method:'DELETE' }),
 
-  exportJournalsCsv:     (fiscalYearId?: number) => `${BASE}/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
-  exportTrialBalanceCsv: (fiscalYearId?: number) => `${BASE}/export/trial-balance.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
-  exportBackup:          () => `${BASE}/export/backup.json`,
+  // エクスポートは BASE を含まないパスを返す（download() / authFetch 経由で取得）
+  exportJournalsCsv:     (fiscalYearId?: number) => `/export/journals.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
+  exportTrialBalanceCsv: (fiscalYearId?: number) => `/export/trial-balance.csv${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`,
+  exportBackup:          () => `/export/backup.json`,
+  download,
 
   restore: (data: unknown) => request<{ message: string }>('/restore', { method:'POST', body: JSON.stringify(data) }),
 }

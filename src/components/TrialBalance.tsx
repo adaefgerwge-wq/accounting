@@ -21,9 +21,9 @@ export default function TrialBalancePage() {
     <div className="page" style={{ display:'flex', flexDirection:'column', height:'100%' }}>
       <div className="toolbar">
         <h2><i className="ti ti-table" />試算表</h2>
-        <a href={api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined)} download>
-          <button><i className="ti ti-download" /> CSV出力</button>
-        </a>
+        <button onClick={() => api.download(api.exportTrialBalanceCsv(currentFiscalYearId ?? undefined), 'trial-balance.csv')}>
+          <i className="ti ti-download" /> CSV出力
+        </button>
       </div>
       <div className="content">
         <div style={{ display:'flex', gap:24, marginBottom:12, fontSize:13, color:'#555' }}>

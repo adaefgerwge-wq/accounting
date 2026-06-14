@@ -16,18 +16,30 @@ function toRow(r: any) {
   }
 }
 
-async function genInvoiceNo() {
+async function genInvoiceNo(userId: number) {
   const prefix = `INV-${new Date().getFullYear()}-`
-  const [rows] = await pool.query('SELECT invoice_no FROM invoices WHERE invoice_no LIKE ? ORDER BY id DESC LIMIT 1', [`${prefix}%`]) as any
+  const [rows] = await pool.query(
+    'SELECT invoice_no FROM invoices WHERE user_id = ? AND invoice_no LIKE ? ORDER BY id DESC LIMIT 1',
+    [userId, `${prefix}%`]
+  ) as any
   const last = rows[0]?.invoice_no
   const seq  = last ? parseInt(last.split('-').pop()) + 1 : 1
   return `${prefix}${String(seq).padStart(4, '0')}`
 }
 
-invoicesRouter.get('/', async (_req, res, next) => {
+// 指定IDの請求書がそのユーザーのものか確認
+async function ownsInvoice(conn: any, id: string, userId: number): Promise<boolean> {
+  const [rows] = await conn.query('SELECT id FROM invoices WHERE id = ? AND user_id = ?', [id, userId]) as any
+  return rows.length > 0
+}
+
+invoicesRouter.get('/', async (req, res, next) => {
   try {
-    const [invoices] = await pool.query('SELECT * FROM invoices ORDER BY issue_date DESC, id DESC') as any
-    const [items]    = await pool.query('SELECT * FROM invoice_items ORDER BY id') as any
+    const [invoices] = await pool.query('SELECT * FROM invoices WHERE user_id = ? ORDER BY issue_date DESC, id DESC', [req.userId]) as any
+    const [items]    = await pool.query(
+      'SELECT it.* FROM invoice_items it JOIN invoices i ON it.invoice_id = i.id WHERE i.user_id = ? ORDER BY it.id',
+      [req.userId]
+    ) as any
     const result = invoices.map((inv: any) => toRow({ ...inv, items: items.filter((i: any) => i.invoice_id === inv.id) }))
     res.json(result)
   } catch(e) { next(e) }
@@ -38,10 +50,10 @@ invoicesRouter.post('/', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
-    const invoiceNo = await genInvoiceNo()
+    const invoiceNo = await genInvoiceNo(req.userId)
     const [r] = await conn.query(
-      'INSERT INTO invoices (invoice_no, partner_code, partner_name, partner_addr, issue_date, due_date, memo) VALUES (?,?,?,?,?,?,?)',
-      [invoiceNo, b.partnerCode, b.partnerName, b.partnerAddr, b.issueDate, b.dueDate, b.memo]
+      'INSERT INTO invoices (user_id, invoice_no, partner_code, partner_name, partner_addr, issue_date, due_date, memo) VALUES (?,?,?,?,?,?,?,?)',
+      [req.userId, invoiceNo, b.partnerCode, b.partnerName, b.partnerAddr, b.issueDate, b.dueDate, b.memo]
     ) as any
     if (b.items?.length) {
       await conn.query('INSERT INTO invoice_items (invoice_id, description, qty, unit_price, tax_type) VALUES ?',
@@ -59,9 +71,12 @@ invoicesRouter.put('/:id', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
+    if (!(await ownsInvoice(conn, req.params.id, req.userId))) {
+      await conn.rollback(); res.status(404).json({ message: '請求書が見つかりません' }); return
+    }
     await conn.query(
-      'UPDATE invoices SET partner_code=?, partner_name=?, partner_addr=?, issue_date=?, due_date=?, memo=? WHERE id=?',
-      [b.partnerCode, b.partnerName, b.partnerAddr, b.issueDate, b.dueDate, b.memo, req.params.id]
+      'UPDATE invoices SET partner_code=?, partner_name=?, partner_addr=?, issue_date=?, due_date=?, memo=? WHERE id=? AND user_id=?',
+      [b.partnerCode, b.partnerName, b.partnerAddr, b.issueDate, b.dueDate, b.memo, req.params.id, req.userId]
     )
     await conn.query('DELETE FROM invoice_items WHERE invoice_id = ?', [req.params.id])
     if (b.items?.length) {
@@ -77,14 +92,15 @@ invoicesRouter.put('/:id', async (req, res, next) => {
 
 invoicesRouter.patch('/:id/status', async (req, res, next) => {
   try {
-    await pool.query('UPDATE invoices SET status = ? WHERE id = ?', [req.body.status, req.params.id])
+    const [result] = await pool.query('UPDATE invoices SET status = ? WHERE id = ? AND user_id = ?', [req.body.status, req.params.id, req.userId]) as any
+    if (result.affectedRows === 0) { res.status(404).json({ message: '請求書が見つかりません' }); return }
     res.json({ ok: true })
   } catch(e) { next(e) }
 })
 
 invoicesRouter.delete('/:id', async (req, res, next) => {
   try {
-    await pool.query('DELETE FROM invoices WHERE id = ?', [req.params.id])
+    await pool.query('DELETE FROM invoices WHERE id = ? AND user_id = ?', [req.params.id, req.userId])
     res.status(204).send()
   } catch(e) { next(e) }
 })

@@ -8,7 +8,9 @@ reportRouter.get('/monthly', async (req, res, next) => {
   try {
     const { fiscalYearId } = req.query
     const cond = fiscalYearId ? 'AND j.fiscal_year_id = ?' : ''
-    const params = fiscalYearId ? [fiscalYearId] : []
+    // パラメータ順：accounts join の user_id → where の user_id → (任意) fiscalYearId
+    const params: any[] = [req.userId, req.userId]
+    if (fiscalYearId) params.push(fiscalYearId)
 
     const [rows] = await pool.query(`
       SELECT
@@ -18,8 +20,8 @@ reportRouter.get('/monthly', async (req, res, next) => {
         SUM(l.amount)                 AS total
       FROM journal_lines l
       JOIN journals j  ON j.id = l.journal_id
-      JOIN accounts a  ON a.code = l.account_code
-      WHERE 1=1 ${cond}
+      JOIN accounts a  ON a.code = l.account_code AND a.user_id = ?
+      WHERE j.user_id = ? ${cond}
       GROUP BY month, a.type, l.side
       ORDER BY month
     `, params) as any
@@ -42,8 +44,10 @@ reportRouter.get('/monthly', async (req, res, next) => {
 reportRouter.get('/monthly-accounts', async (req, res, next) => {
   try {
     const { fiscalYearId, type } = req.query
-    const conditions = ['1=1']
-    const params: any[] = []
+    // accounts join の user_id を先頭に
+    const params: any[] = [req.userId]
+    const conditions = ['j.user_id = ?']
+    params.push(req.userId)
     if (fiscalYearId) { conditions.push('j.fiscal_year_id = ?'); params.push(fiscalYearId) }
     if (type)         { conditions.push('a.type = ?'); params.push(type) }
 
@@ -55,7 +59,7 @@ reportRouter.get('/monthly-accounts', async (req, res, next) => {
         SUM(CASE WHEN l.side = 'credit' THEN l.amount ELSE 0 END) AS credit_sum
       FROM journal_lines l
       JOIN journals j ON j.id = l.journal_id
-      JOIN accounts a ON a.code = l.account_code
+      JOIN accounts a ON a.code = l.account_code AND a.user_id = ?
       WHERE ${conditions.join(' AND ')}
       GROUP BY month, a.code, a.name, a.type
       ORDER BY month, a.code

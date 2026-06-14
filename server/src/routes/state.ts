@@ -4,13 +4,14 @@ import { mapAccount, mapJournal, mapJournalLine, mapPartner, mapSubAccount, mapF
 
 export const stateRouter = Router()
 
-stateRouter.get('/', async (_req, res, next) => {
+stateRouter.get('/', async (req, res, next) => {
   try {
-    const [accountRows]    = await pool.query('SELECT * FROM accounts ORDER BY code') as any
-    const [partnerRows]    = await pool.query('SELECT * FROM partners ORDER BY code') as any
-    const [subAccountRows] = await pool.query('SELECT * FROM sub_accounts ORDER BY account_code, code') as any
-    const [journalRows]    = await pool.query('SELECT * FROM journals ORDER BY date DESC, id DESC') as any
-    const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years ORDER BY start_date DESC') as any
+    const uid = req.userId
+    const [accountRows]    = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [uid]) as any
+    const [partnerRows]    = await pool.query('SELECT * FROM partners WHERE user_id = ? ORDER BY code', [uid]) as any
+    const [subAccountRows] = await pool.query('SELECT * FROM sub_accounts WHERE user_id = ? ORDER BY account_code, code', [uid]) as any
+    const [journalRows]    = await pool.query('SELECT * FROM journals WHERE user_id = ? ORDER BY date DESC, id DESC', [uid]) as any
+    const [fiscalYearRows] = await pool.query('SELECT * FROM fiscal_years WHERE user_id = ? ORDER BY start_date DESC', [uid]) as any
 
     const journals = []
     if (journalRows.length) {
