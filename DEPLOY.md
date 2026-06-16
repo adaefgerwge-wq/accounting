@@ -17,6 +17,9 @@
 4. **New → Database → Add MySQL** でMySQLを追加
 5. APIサービスの **Variables** に以下を追加：
    - `MYSQL_URL` = MySQLサービスの `MYSQL_URL`（Variablesから参照、`${{ MySQL.MYSQL_URL }}` で参照可）
+   - `JWT_SECRET` = ログイン認証のJWT署名鍵。`openssl rand -base64 48` などで生成した推測不可能な値を設定する
+     - **未設定だとコード内の開発用既定値が使われ、誰でもトークンを偽造できてしまうため必須**
+     - 一度決めたら変更しない（変えると全ユーザーが再ログインになる）
    - （`CLIENT_ORIGIN` は③で設定）
 6. デプロイ完了後、**Settings → Networking → Generate Domain** で公開URLを発行
    - 例: `https://accounting-production.up.railway.app`
@@ -48,11 +51,13 @@
 ## 動作確認
 
 - `https://<your-app>.vercel.app` を開く
-- 画面が表示され、仕訳などが保存・表示できればOK
+- ログイン画面が表示されるので、**新規登録**してログイン（登録時にそのユーザー用の初期データが自動生成される）
+- 仕訳などが保存・表示できればOK
 - うまくいかない時：ブラウザのコンソール（F12）でAPIエラーやCORSエラーを確認
 
 ## 補足
 
-- 初回起動時にスキーマ作成とシードデータ投入が自動で走る（`ensureSchema` / `seedIfEmpty`）
+- 初回起動時にスキーマ作成が自動で走る（`ensureSchema` / `ensureInvoiceSchema`）。旧スキーマを検出した場合はデータをリセットして新スキーマで作り直す
+- 初期データ（科目・会計年度・サンプル仕訳）は**ユーザー登録時にそのユーザー分が自動生成**される（グローバルなシードは廃止）
 - DBの中身はRailwayのMySQLに保存される（ローカルとは別物）
 - 環境変数 `.env` はGit管理外。各サービスのダッシュボードで設定する
