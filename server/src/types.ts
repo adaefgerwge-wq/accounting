@@ -43,10 +43,22 @@ export interface JournalLine {
   taxType: TaxType
 }
 
+export type JournalKind = 'normal' | 'opening' | 'adjusting' | 'closing'
+
 export interface Journal {
   id: number
   fiscalYearId: number
   date: string
   memo: string
+  kind: JournalKind
   lines: JournalLine[]
+}
+
+export interface FixedAsset {
+  id: number
+  name: string
+  acquisitionDate: string
+  cost: number
+  usefulLifeYears: number
+  memo: string
 }

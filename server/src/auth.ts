@@ -2,6 +2,10 @@ import type { Request, Response, NextFunction } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
+// 本番では JWT_SECRET 未設定を許さない（開発用既定値のまま公開するのを防ぐ）
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET が未設定です。本番環境では必ず環境変数で設定してください。')
+}
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-insecure-secret-change-me'
 if (!process.env.JWT_SECRET) {
   console.warn('⚠ JWT_SECRET が未設定です。開発用の既定値を使用します。本番環境では必ず設定してください。')

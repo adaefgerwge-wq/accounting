@@ -14,6 +14,7 @@ import { recalculateRouter } from './routes/recalculate.js'
 import { reportRouter }      from './routes/report.js'
 import { invoicesRouter }    from './routes/invoices.js'
 import { bankRulesRouter }   from './routes/bank-rules.js'
+import { fixedAssetsRouter } from './routes/fixed-assets.js'
 import { authRouter }         from './routes/auth.js'
 import { requireAuth }        from './auth.js'
 import { createDatabaseIfNeeded } from './db.js'
@@ -54,6 +55,7 @@ app.use('/api/recalculate',  requireAuth, recalculateRouter)
 app.use('/api/report',       requireAuth, reportRouter)
 app.use('/api/invoices',     requireAuth, invoicesRouter)
 app.use('/api/bank-rules',   requireAuth, bankRulesRouter)
+app.use('/api/fixed-assets', requireAuth, fixedAssetsRouter)
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   console.error(error)
