@@ -1,4 +1,7 @@
-import type { Account, Journal, Partner, SubAccount, FiscalYear } from './types'
+import type {
+  Account, Journal, Partner, SubAccount, FiscalYear,
+  BalanceReport, TaxSummaryReport, FixedAsset, JournalHistoryEntry,
+} from './types'
 
 // APIのベースURL。本番では VITE_API_BASE_URL（例: https://xxx/api）、
 // ローカルでは Vite プロキシ経由の '/api'。直接 fetch する箇所でも使う。
@@ -77,9 +80,29 @@ export const api = {
 
   getState: () => request<AppData>('/state'),
 
-  addJournal:    (j: Omit<Journal,'id'>)  => request<JournalState>('/journals',         { method:'POST',   body: JSON.stringify(j) }),
-  updateJournal: (j: Journal)             => request<JournalState>(`/journals/${j.id}`, { method:'PUT',    body: JSON.stringify(j) }),
+  addJournal:    (j: Omit<Journal,'id'|'kind'>) => request<JournalState>('/journals',         { method:'POST',   body: JSON.stringify(j) }),
+  updateJournal: (j: Omit<Journal,'kind'> & Partial<Pick<Journal,'kind'>>) => request<JournalState>(`/journals/${j.id}`, { method:'PUT', body: JSON.stringify(j) }),
   deleteJournal: (id: number)             => request<JournalState>(`/journals/${id}`,   { method:'DELETE' }),
+  journalHistory: (id: number)            => request<JournalHistoryEntry[]>(`/journals/${id}/history`),
+
+  // ── レポート ──
+  reportBalances: (fiscalYearId?: number, excludeClosing?: boolean) =>
+    request<BalanceReport>(`/report/balances?${new URLSearchParams({
+      ...(fiscalYearId ? { fiscalYearId: String(fiscalYearId) } : {}),
+      ...(excludeClosing ? { excludeClosing: '1' } : {}),
+    })}`),
+  taxSummary: (fiscalYearId?: number) =>
+    request<TaxSummaryReport>(`/report/tax-summary${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`),
+
+  // ── 固定資産 ──
+  fixedAssets:      (fiscalYearId?: number) => request<FixedAsset[]>(`/fixed-assets${fiscalYearId ? `?fiscalYearId=${fiscalYearId}` : ''}`),
+  addFixedAsset:    (a: Omit<FixedAsset,'id'>) => request<{ ok: true }>('/fixed-assets', { method:'POST', body: JSON.stringify(a) }),
+  updateFixedAsset: (a: FixedAsset)            => request<{ ok: true }>(`/fixed-assets/${a.id}`, { method:'PUT', body: JSON.stringify(a) }),
+  deleteFixedAsset: (id: number)               => authFetch(`/fixed-assets/${id}`, { method:'DELETE' }),
+
+  // ── 請求書の仕訳連動 ──
+  journalizeInvoice: (id: number, type: 'sales' | 'payment', date?: string) =>
+    request<any>(`/invoices/${id}/journalize`, { method:'POST', body: JSON.stringify({ type, date }) }),
 
   addAccount:    (a: Account)               => request<Account[]>('/accounts',                                { method:'POST',   body: JSON.stringify(a) }),
   updateAccount: (code: string, a: Account) => request<Account[]>(`/accounts/${encodeURIComponent(code)}`,   { method:'PUT',    body: JSON.stringify(a) }),
