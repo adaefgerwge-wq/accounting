@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db.js'
 import { mapAccount } from '../mappers.js'
-import { balanceSign } from '../balance.js'
+import { aggregateBalances, type ReportLineRow } from '../domain/reporting.js'
 
 export const exportRouter = Router()
 
@@ -90,42 +90,22 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
 
     const [accRows] = await pool.query('SELECT * FROM accounts WHERE user_id = ? ORDER BY code', [req.userId]) as any
     const accounts = accRows.map(mapAccount)
-    const typeOf = new Map<string, string>(accounts.map((a: any) => [a.code, a.type]))
 
-    // 全仕訳明細を日付付きで取得（このユーザー分）
+    // 全仕訳明細を日付付きで取得し、画面と同じ共通ロジックで集計する
     const [lineRows] = await pool.query(`
-      SELECT jl.account_code, jl.side, jl.amount, j.date
+      SELECT jl.account_code, jl.side, jl.amount, j.date, j.kind
       FROM journal_lines jl
       JOIN journals j ON jl.journal_id = j.id
       WHERE j.user_id = ?
     `, [req.userId]) as any
-
-    // 科目ごとに 期首残高(符号付)・期中借方・期中貸方・期末残高(符号付) を集計
-    type Agg = { openingSigned: number; periodDebit: number; periodCredit: number; closingSigned: number }
-    const agg = new Map<string, Agg>()
-    for (const a of accounts) agg.set(a.code, { openingSigned: 0, periodDebit: 0, periodCredit: 0, closingSigned: 0 })
-
-    for (const l of lineRows) {
-      const d = String(l.date).slice(0,10)
-      const type = typeOf.get(l.account_code)
-      if (!agg.has(l.account_code)) agg.set(l.account_code, { openingSigned: 0, periodDebit: 0, periodCredit: 0, closingSigned: 0 })
-      const a = agg.get(l.account_code)!
-      const delta = l.amount * balanceSign(type, l.side)
-
-      // 期首：開始日より前の仕訳
-      if (startDate && d < startDate) {
-        a.openingSigned += delta
-        a.closingSigned += delta
-        continue
-      }
-      // 期末より後の仕訳は集計しない（年度指定時）
-      if (endDate && d > endDate) continue
-
-      // 期中：期間内の仕訳
-      if (l.side === 'debit') a.periodDebit += l.amount
-      else                    a.periodCredit += l.amount
-      a.closingSigned += delta
-    }
+    const lines: ReportLineRow[] = lineRows.map((r: any) => ({
+      accountCode: r.account_code, side: r.side, amount: r.amount,
+      date: String(r.date).slice(0, 10), kind: r.kind ?? 'normal',
+    }))
+    const balanceRows = aggregateBalances(accounts, lines, {
+      start: startDate ?? undefined, end: endDate ?? undefined,
+    })
+    const agg = new Map(balanceRows.map(r => [r.code, r]))
 
     const esc = (v: any) => `"${String(v).replace(/"/g, '""')}"`
     // 期首・期末は「正常残高側を正」の符号付き残高を1列にまとめて出力
@@ -144,8 +124,8 @@ exportRouter.get('/trial-balance.csv', async (req, res, next) => {
 
       for (const a of inType) {
         const ag = agg.get(a.code)!
-        out.push([a.code, a.name, TYPE_LABELS[type], ag.openingSigned, ag.periodDebit, ag.periodCredit, ag.closingSigned].map(esc).join(','))
-        sub.open += ag.openingSigned; sub.pd += ag.periodDebit; sub.pc += ag.periodCredit; sub.close += ag.closingSigned
+        out.push([a.code, a.name, TYPE_LABELS[type], ag.opening, ag.periodDebit, ag.periodCredit, ag.closing].map(esc).join(','))
+        sub.open += ag.opening; sub.pd += ag.periodDebit; sub.pc += ag.periodCredit; sub.close += ag.closing
       }
       // カテゴリ合計行
       out.push(['', `【${TYPE_LABELS[type]} 合計】`, '', sub.open, sub.pd, sub.pc, sub.close].map(esc).join(','))
@@ -170,6 +150,7 @@ exportRouter.get('/backup.json', async (req, res, next) => {
     const [subAccounts] = await pool.query('SELECT * FROM sub_accounts WHERE user_id = ? ORDER BY account_code, code', [req.userId]) as any
     const [jRows]       = await pool.query('SELECT * FROM journals WHERE user_id = ? ORDER BY date, id', [req.userId]) as any
     const [fiscalYears] = await pool.query('SELECT * FROM fiscal_years WHERE user_id = ? ORDER BY start_date', [req.userId]) as any
+    const [fixedAssets] = await pool.query('SELECT * FROM fixed_assets WHERE user_id = ? ORDER BY acquisition_date, id', [req.userId]) as any
 
     let journals: any[] = []
     if (jRows.length) {
@@ -185,6 +166,6 @@ exportRouter.get('/backup.json', async (req, res, next) => {
 
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Content-Disposition', `attachment; filename="accounting-backup-${new Date().toISOString().slice(0,10)}.json"`)
-    res.json({ exportedAt: new Date().toISOString(), accounts, partners, subAccounts, journals, fiscalYears })
+    res.json({ exportedAt: new Date().toISOString(), accounts, partners, subAccounts, journals, fiscalYears, fixedAssets })
   } catch (e) { next(e) }
 })

@@ -3,7 +3,7 @@ import type { Account, Journal, JournalLine, Partner, SubAccount, FiscalYear } f
 type AccountRow = { code: string; name: string; type: Account['type']; balance: number; has_sub: 0|1|boolean; default_tax_type?: string }
 type PartnerRow = { code: string; name: string; type: Partner['type']; account_code: string }
 type SubAccountRow = { code: string; name: string; account_code: string }
-type JournalRow = { id: number; fiscal_year_id: number; date: Date|string; memo: string }
+type JournalRow = { id: number; fiscal_year_id: number; date: Date|string; memo: string; kind?: Journal['kind'] }
 type JournalLineRow = {
   id: number; journal_id: number
   side: 'debit' | 'credit'
@@ -35,7 +35,7 @@ export function mapJournalLine(row: JournalLineRow): JournalLine {
 }
 export function mapJournal(row: JournalRow, lines: JournalLine[]): Journal {
   const date = row.date instanceof Date ? row.date.toISOString().slice(0,10) : String(row.date).slice(0,10)
-  return { id: row.id, fiscalYearId: row.fiscal_year_id, date, memo: row.memo ?? '', lines }
+  return { id: row.id, fiscalYearId: row.fiscal_year_id, date, memo: row.memo ?? '', kind: row.kind ?? 'normal', lines }
 }
 export function mapFiscalYear(row: FiscalYearRow): FiscalYear {
   const startDate = row.start_date instanceof Date ? row.start_date.toISOString().slice(0,10) : String(row.start_date).slice(0,10)

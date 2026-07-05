@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../store'
-import { authFetch } from '../api'
+import { authFetch, api } from '../api'
 import Modal from './Modal'
 
 // ローカルタイムゾーン基準の日付（YYYY-MM-DD）。toISOString()のUTCずれを防ぐ。
@@ -16,9 +16,12 @@ interface InvoiceItem { id?: number; description: string; qty: number; unitPrice
 interface Invoice {
   id: number; invoiceNo: string; partnerCode: string; partnerName: string; partnerAddr: string
   issueDate: string; dueDate: string; memo: string; status: 'draft'|'sent'|'paid'; items: InvoiceItem[]
+  salesJournalId: number | null; paymentJournalId: number | null
 }
 
-const emptyInvoice = (): Omit<Invoice,'id'|'invoiceNo'|'status'> => ({
+interface Issuer { name: string; addr: string; regNo: string }
+
+const emptyInvoice = (): Omit<Invoice,'id'|'invoiceNo'|'status'|'salesJournalId'|'paymentJournalId'> => ({
   partnerCode: '', partnerName: '', partnerAddr: '',
   issueDate: localDate(),
   dueDate: localDate(30),
@@ -27,22 +30,39 @@ const emptyInvoice = (): Omit<Invoice,'id'|'invoiceNo'|'status'> => ({
 
 function calcTotals(items: InvoiceItem[]) {
   const subtotal = items.reduce((s,i) => s + i.qty * i.unitPrice, 0)
+  const net10    = items.filter(i => i.taxType==='taxable10').reduce((s,i) => s + i.qty*i.unitPrice, 0)
+  const net8     = items.filter(i => i.taxType==='taxable8' ).reduce((s,i) => s + i.qty*i.unitPrice, 0)
+  const netEx    = items.filter(i => i.taxType==='exempt'   ).reduce((s,i) => s + i.qty*i.unitPrice, 0)
   const tax10    = items.filter(i => i.taxType==='taxable10').reduce((s,i) => s + Math.floor(i.qty*i.unitPrice*0.1), 0)
   const tax8     = items.filter(i => i.taxType==='taxable8' ).reduce((s,i) => s + Math.floor(i.qty*i.unitPrice*0.08), 0)
-  return { subtotal, tax10, tax8, total: subtotal + tax10 + tax8 }
+  return { subtotal, net10, net8, netEx, tax10, tax8, total: subtotal + tax10 + tax8 }
 }
 
 export default function InvoicesPage() {
-  const { partners } = useApp()
+  const { partners, reload } = useApp()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [open, setOpen]         = useState(false)
   const [editTarget, setEdit]   = useState<Invoice | null>(null)
   const [form, setForm]         = useState(emptyInvoice())
   const [previewId, setPreview] = useState<number | null>(null)
+  const [issuer, setIssuer]     = useState<Issuer>({ name: '', addr: '', regNo: '' })
 
   useEffect(() => {
     authFetch('/invoices').then(r => r.json()).then(setInvoices)
+    authFetch('/settings').then(r => r.json()).then(s =>
+      setIssuer({ name: s.issuer_name ?? '', addr: s.issuer_addr ?? '', regNo: s.issuer_reg_no ?? '' }))
   }, [])
+
+  // 仕訳連動：売上計上（発行日）／入金（本日）
+  const handleJournalize = async (inv: Invoice, type: 'sales' | 'payment') => {
+    const label = type === 'sales' ? `売上仕訳（${inv.issueDate} 売掛金/売上高）` : '入金仕訳（本日 普通預金/売掛金）'
+    if (!confirm(`${inv.invoiceNo} の${label}を作成しますか？`)) return
+    try {
+      const updated = await api.journalizeInvoice(inv.id, type, type === 'payment' ? localDate() : undefined)
+      setInvoices(prev => prev.map(x => x.id === inv.id ? { ...x, ...updated } : x))
+      await reload() // 仕訳帳・残高に反映
+    } catch (e) { alert(e instanceof Error ? e.message : '仕訳の作成に失敗しました') }
+  }
 
   const openNew = () => { setForm(emptyInvoice()); setEdit(null); setOpen(true) }
   const openEdit = (inv: Invoice) => {
@@ -121,6 +141,22 @@ export default function InvoicesPage() {
                           </select>
                         </td>
                         <td><div className="actions-cell" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="icon-btn"
+                            title={inv.salesJournalId ? '売上仕訳 作成済み' : '売上仕訳を作成'}
+                            disabled={!!inv.salesJournalId}
+                            style={inv.salesJournalId ? { color: '#27500A', opacity: 0.6 } : undefined}
+                            onClick={() => handleJournalize(inv, 'sales')}>
+                            <i className={`ti ${inv.salesJournalId ? 'ti-checks' : 'ti-book-upload'}`} />
+                          </button>
+                          <button
+                            className="icon-btn"
+                            title={inv.paymentJournalId ? '入金仕訳 作成済み' : '入金仕訳を作成'}
+                            disabled={!!inv.paymentJournalId}
+                            style={inv.paymentJournalId ? { color: '#27500A', opacity: 0.6 } : undefined}
+                            onClick={() => handleJournalize(inv, 'payment')}>
+                            <i className={`ti ${inv.paymentJournalId ? 'ti-checks' : 'ti-cash'}`} />
+                          </button>
                           <button className="icon-btn" onClick={() => openEdit(inv)}><i className="ti ti-pencil" /></button>
                           <button className="icon-btn danger" onClick={() => handleDelete(inv.id)}><i className="ti ti-trash" /></button>
                         </div></td>
@@ -133,7 +169,7 @@ export default function InvoicesPage() {
         </div>
 
         {/* プレビュー */}
-        {preview && <InvoicePreview invoice={preview} onClose={() => setPreview(null)} />}
+        {preview && <InvoicePreview invoice={preview} issuer={issuer} onClose={() => setPreview(null)} />}
       </div>
 
       {/* 編集モーダル */}
@@ -201,9 +237,9 @@ export default function InvoicesPage() {
   )
 }
 
-function InvoicePreview({ invoice, onClose }: { invoice: Invoice; onClose: () => void }) {
+function InvoicePreview({ invoice, issuer, onClose }: { invoice: Invoice; issuer: Issuer; onClose: () => void }) {
   const printRef = useRef<HTMLDivElement>(null)
-  const { total, subtotal, tax10, tax8 } = calcTotals(invoice.items)
+  const { total, subtotal, net10, net8, netEx, tax10, tax8 } = calcTotals(invoice.items)
 
   const handlePrint = () => {
     const content = printRef.current?.innerHTML
@@ -244,6 +280,13 @@ function InvoicePreview({ invoice, onClose }: { invoice: Invoice; onClose: () =>
           <div><span style={{color:'#aaa'}}>発行日: </span>{invoice.issueDate}</div>
           <div><span style={{color:'#aaa'}}>支払期限: </span>{invoice.dueDate}</div>
         </div>
+        {(issuer.name || issuer.regNo) && (
+          <div style={{marginBottom:16, textAlign:'right', fontSize:11, color:'#555'}}>
+            {issuer.name && <div style={{fontWeight:600, fontSize:13}}>{issuer.name}</div>}
+            {issuer.addr && <div>{issuer.addr}</div>}
+            {issuer.regNo && <div>登録番号: {issuer.regNo}</div>}
+          </div>
+        )}
         <div style={{ background:'#EEEDFE', color:'#3C3489', padding:'10px 14px', borderRadius:6, marginBottom:16, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <span style={{fontWeight:500}}>ご請求金額</span>
           <span style={{fontSize:18, fontWeight:700}}>¥{total.toLocaleString()}</span>
@@ -267,6 +310,15 @@ function InvoicePreview({ invoice, onClose }: { invoice: Invoice; onClose: () =>
           {tax8  > 0 && <div style={{color:'#888'}}>消費税（8%）: ¥{tax8.toLocaleString()}</div>}
           <div style={{fontWeight:700, fontSize:14, marginTop:4}}>合計: ¥{total.toLocaleString()}</div>
         </div>
+        {/* 適格請求書の税率別内訳 */}
+        <table style={{marginTop:12, fontSize:11}}>
+          <thead><tr><th>税率区分</th><th style={{textAlign:'right'}}>対象金額（税抜）</th><th style={{textAlign:'right'}}>消費税額</th></tr></thead>
+          <tbody>
+            {net10 > 0 && <tr><td>10%対象</td><td style={{textAlign:'right'}}>¥{net10.toLocaleString()}</td><td style={{textAlign:'right'}}>¥{tax10.toLocaleString()}</td></tr>}
+            {net8  > 0 && <tr><td>8%対象（軽減税率）</td><td style={{textAlign:'right'}}>¥{net8.toLocaleString()}</td><td style={{textAlign:'right'}}>¥{tax8.toLocaleString()}</td></tr>}
+            {netEx > 0 && <tr><td>非課税</td><td style={{textAlign:'right'}}>¥{netEx.toLocaleString()}</td><td style={{textAlign:'right'}}>—</td></tr>}
+          </tbody>
+        </table>
         {invoice.memo && <div style={{marginTop:16, padding:'8px 12px', background:'#fafaf7', borderRadius:4, fontSize:11, color:'#666'}}>{invoice.memo}</div>}
       </div>
     </div>

@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { Account, Partner, SubAccount, Journal, PageId, FiscalYear } from './types'
-import { initialAccounts, initialPartners, initialJournals } from './data'
 import { api } from './api'
 
 interface AppState {
@@ -17,7 +16,7 @@ interface AppState {
 interface AppActions {
   setPage: (page: PageId) => void
   setCurrentFiscalYearId: (id: number | null) => void
-  addJournal: (j: Omit<Journal,'id'>) => Promise<void>
+  addJournal: (j: Omit<Journal,'id'|'kind'>) => Promise<void>
   updateJournal: (j: Journal) => Promise<void>
   deleteJournal: (id: number) => Promise<void>
   addAccount: (a: Account) => Promise<void>
@@ -40,10 +39,10 @@ type AppContextType = AppState & AppActions
 const AppContext = createContext<AppContextType | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [accounts,    setAccounts]    = useState<Account[]>(initialAccounts)
-  const [partners,    setPartners]    = useState<Partner[]>(initialPartners)
+  const [accounts,    setAccounts]    = useState<Account[]>([])
+  const [partners,    setPartners]    = useState<Partner[]>([])
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([])
-  const [journals,    setJournals]    = useState<Journal[]>(initialJournals)
+  const [journals,    setJournals]    = useState<Journal[]>([])
   const [fiscalYears, setFiscalYears] = useState<FiscalYear[]>([])
   const [currentPage, setCurrentPage] = useState<PageId>('journal')
   const [currentFiscalYearId, setCurrentFiscalYearId] = useState<number | null>(null)
@@ -77,7 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setPage = useCallback((page: PageId) => setCurrentPage(page), [])
 
-  const addJournal = useCallback(async (j: Omit<Journal,'id'>) => {
+  const addJournal = useCallback(async (j: Omit<Journal,'id'|'kind'>) => {
     const data = await api.addJournal(j); setAccounts(data.accounts); setJournals(data.journals)
   }, [])
   const updateJournal = useCallback(async (j: Journal) => {

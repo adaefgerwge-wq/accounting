@@ -8,6 +8,7 @@ const NAV: { section: string; items: { id: PageId; icon: string; label: string }
     { id: 'ledger',          icon: 'ti-book-2',     label: '総勘定元帳' },
     { id: 'trial-balance',   icon: 'ti-table',      label: '試算表' },
     { id: 'monthly-report',  icon: 'ti-chart-line', label: '月次レポート' },
+    { id: 'tax-summary',     icon: 'ti-receipt-tax', label: '消費税集計' },
     { id: 'invoices',      icon: 'ti-file-invoice',    label: '請求書' },
     { id: 'bank-import',   icon: 'ti-building-bank',   label: '銀行取り込み' },
   ]},
@@ -19,6 +20,7 @@ const NAV: { section: string; items: { id: PageId; icon: string; label: string }
     { id: 'accounts',     icon: 'ti-list',      label: '勘定科目' },
     { id: 'sub-accounts', icon: 'ti-list-tree', label: '補助科目' },
     { id: 'partners',     icon: 'ti-building',  label: '取引先' },
+    { id: 'fixed-assets', icon: 'ti-building-warehouse', label: '固定資産' },
     { id: 'fiscal-years', icon: 'ti-calendar', label: '会計年度' },
   ]},
   { section: 'ツール', items: [

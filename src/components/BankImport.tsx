@@ -38,9 +38,10 @@ export default function BankImportPage() {
           return { date: row[dateKey]?.trim() ?? '', amount: parseInt(rawAmt) || 0, description: row[descKey]?.trim() ?? '' }
         }).filter(r => r.date && r.amount)
 
+        if (!currentFiscalYearId) { alert('先に会計年度を作成・選択してください'); return }
         const res = await authFetch('/bank-rules/match', {
           method: 'POST',
-          body: JSON.stringify({ rows: raw, fiscalYearId: currentFiscalYearId ?? 1 })
+          body: JSON.stringify({ rows: raw, fiscalYearId: currentFiscalYearId })
         })
         const matched = await res.json()
         setRows(matched.map((r: any) => ({ ...r, selected: r.matched })))

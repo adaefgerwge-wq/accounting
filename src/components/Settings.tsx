@@ -10,12 +10,24 @@ export default function SettingsPage() {
   const [taxMethod,     setTaxMethod]     = useState<'inclusive'|'exclusive'>('inclusive')
   const [taxSaving,     setTaxSaving]     = useState(false)
   const [recalculating, setRecalculating] = useState(false)
+  // 請求書に印字する事業者情報（適格請求書発行事業者）
+  const [issuer, setIssuer] = useState({ name: '', addr: '', regNo: '' })
+  const [issuerSaved, setIssuerSaved] = useState(false)
 
   useEffect(() => {
     authFetch('/settings').then(r => r.json()).then(s => {
       if (s.tax_method) setTaxMethod(s.tax_method)
+      setIssuer({ name: s.issuer_name ?? '', addr: s.issuer_addr ?? '', regNo: s.issuer_reg_no ?? '' })
     })
   }, [])
+
+  const handleIssuerSave = async () => {
+    await authFetch('/settings/issuer_name',   { method: 'PUT', body: JSON.stringify({ value: issuer.name }) })
+    await authFetch('/settings/issuer_addr',   { method: 'PUT', body: JSON.stringify({ value: issuer.addr }) })
+    await authFetch('/settings/issuer_reg_no', { method: 'PUT', body: JSON.stringify({ value: issuer.regNo }) })
+    setIssuerSaved(true)
+    setTimeout(() => setIssuerSaved(false), 2000)
+  }
 
   const handleDownload = async (path: string, filename: string) => {
     try {
@@ -127,6 +139,30 @@ export default function SettingsPage() {
               <i className="ti ti-refresh" /> {recalculating ? '再計算中...' : '既存仕訳を現在の経理方式で再計算'}
             </button>
             <div style={{fontSize:11, color:'#aaa', marginTop:4}}>消費税仕訳を削除して全仕訳を再処理します</div>
+          </div>
+        </div>
+
+        {/* 事業者情報（請求書印字用） */}
+        <div className="section-card" style={{marginBottom:16}}>
+          <div className="section-header"><span><i className="ti ti-building-store" style={{marginRight:6}} />事業者情報（請求書に印字）</span></div>
+          <div style={{padding:'12px 14px', display:'flex', flexDirection:'column', gap:10}}>
+            <div className="form-row" style={{margin:0}}>
+              <label>事業者名</label>
+              <input value={issuer.name} onChange={e => setIssuer(v => ({...v, name: e.target.value}))} placeholder="例: 株式会社サンプル" style={{width:'100%'}} />
+            </div>
+            <div className="form-row" style={{margin:0}}>
+              <label>住所</label>
+              <input value={issuer.addr} onChange={e => setIssuer(v => ({...v, addr: e.target.value}))} placeholder="例: 東京都〇〇区..." style={{width:'100%'}} />
+            </div>
+            <div className="form-row" style={{margin:0}}>
+              <label>適格請求書発行事業者 登録番号</label>
+              <input value={issuer.regNo} onChange={e => setIssuer(v => ({...v, regNo: e.target.value}))} placeholder="例: T1234567890123" style={{width:'100%'}} />
+              <div className="form-hint">インボイス制度の登録番号（T＋13桁）。請求書の印刷に表示されます</div>
+            </div>
+            <div style={{display:'flex', alignItems:'center', gap:8}}>
+              <button className="primary" onClick={handleIssuerSave}><i className="ti ti-device-floppy" /> 保存</button>
+              {issuerSaved && <span style={{fontSize:12, color:'#27500A'}}>保存しました ✓</span>}
+            </div>
           </div>
         </div>
 

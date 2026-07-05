@@ -12,9 +12,9 @@ const TAG_CLASS: Record<AccountType, string> = {
   revenue: 'tag-revenue', expense: 'tag-expense',
 }
 
-type AccountForm = Omit<Account, 'balance'> & { balance: string }
+type AccountForm = Omit<Account, 'balance'>
 
-const emptyForm = (): AccountForm => ({ code: '', name: '', type: 'asset', balance: '0', hasSub: false, defaultTaxType: 'none' })
+const emptyForm = (): AccountForm => ({ code: '', name: '', type: 'asset', hasSub: false, defaultTaxType: 'none' })
 
 const TAX_OPTIONS = Object.entries(TAX_LABELS) as [TaxType, string][]
 
@@ -26,16 +26,17 @@ export default function AccountsPage() {
 
   const openNew = () => { setForm(emptyForm()); setEditIdx(null); setOpen(true) }
   const openEdit = (i: number) => {
-    const a = accounts[i]
-    setForm({ ...a, balance: String(a.balance) })
+    const { balance: _balance, ...rest } = accounts[i]
+    setForm(rest)
     setEditIdx(i)
     setOpen(true)
   }
 
   const handleSubmit = async () => {
-    const { code, name, type, balance, hasSub, defaultTaxType } = form
+    const { code, name, type, hasSub, defaultTaxType } = form
     if (!code.trim() || !name.trim()) { alert('コードと科目名を入力してください'); return }
-    const account: Account = { code: code.trim(), name: name.trim(), type, balance: parseInt(balance) || 0, hasSub, defaultTaxType }
+    // balance はサーバー側で仕訳から導出されるため送らない（0はプレースホルダ）
+    const account: Account = { code: code.trim(), name: name.trim(), type, balance: 0, hasSub, defaultTaxType }
     try {
       if (editIdx !== null) {
         await updateAccount(editIdx, account)
@@ -127,9 +128,9 @@ export default function AccountsPage() {
             <label>科目名</label>
             <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="例: 受取手形" />
           </div>
-          <div className="form-row">
-            <label>期初残高</label>
-            <input type="number" value={form.balance} onChange={e => set('balance', e.target.value)} />
+          <div className="form-row" style={{ fontSize: 12, color: '#888' }}>
+            開始残高（期初残高）は仕訳帳の「開始残高」仕訳（種別: 開始）で管理します。
+            この科目に開始残高を設定する場合は、開始残高仕訳に行を追加してください。
           </div>
           <div className="form-row">
             <label>既定の消費税区分</label>

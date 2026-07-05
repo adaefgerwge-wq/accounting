@@ -13,6 +13,8 @@ import Settings from './components/Settings'
 import Invoices from './components/Invoices'
 import BankImport from './components/BankImport'
 import MonthlyReport from './components/MonthlyReport'
+import TaxSummary from './components/TaxSummary'
+import FixedAssets from './components/FixedAssets'
 
 export default function App() {
   const { currentPage, loading, error } = useApp()
@@ -28,6 +30,8 @@ export default function App() {
         {currentPage === 'invoices'      && <Invoices />}
         {currentPage === 'bank-import'    && <BankImport />}
         {currentPage === 'monthly-report' && <MonthlyReport />}
+        {currentPage === 'tax-summary'    && <TaxSummary />}
+        {currentPage === 'fixed-assets'   && <FixedAssets />}
         {currentPage === 'accounts'      && <Accounts />}
         {currentPage === 'partners'      && <Partners />}
         {currentPage === 'sub-accounts'  && <SubAccounts />}

@@ -2,30 +2,12 @@ import { Router } from 'express'
 import { pool } from '../db.js'
 import { mapFiscalYear } from '../mappers.js'
 import { balanceSign } from '../balance.js'
+import { buildProfitTransferLines, type PlBalance } from '../domain/closing.js'
+import { buildTaxSettlementLines } from '../domain/tax-settlement.js'
+import { depreciationForPeriod } from '../domain/depreciation.js'
+import { insertJournal, ensureAccount, recomputeBalances, STD_CODES } from '../journal-service.js'
 
 export const fiscalYearsRouter = Router()
-
-const CLOSING_MEMO = '決算振替仕訳'
-
-// 全科目残高を journal_lines から再計算（conn 上のトランザクション内で実行・ユーザーでスコープ）
-async function recomputeBalances(conn: any, userId: number) {
-  await conn.query('UPDATE accounts SET balance = 0 WHERE user_id = ?', [userId])
-  const [accRows] = await conn.query('SELECT code, type FROM accounts WHERE user_id = ?', [userId]) as any
-  const typeOf = new Map<string, string>(accRows.map((r: any) => [r.code, r.type]))
-  const [lines] = await conn.query(
-    `SELECT jl.account_code, jl.side, jl.amount
-     FROM journal_lines jl JOIN journals j ON jl.journal_id = j.id
-     WHERE j.user_id = ?`, [userId]
-  ) as any
-  const deltas = new Map<string, number>()
-  for (const l of lines) {
-    const d = l.amount * balanceSign(typeOf.get(l.account_code), l.side)
-    deltas.set(l.account_code, (deltas.get(l.account_code) ?? 0) + d)
-  }
-  for (const [code, d] of deltas) {
-    await conn.query('UPDATE accounts SET balance = balance + ? WHERE code = ? AND user_id = ?', [d, code, userId])
-  }
-}
 
 const allFiscalYears = async (userId: number, conn: any = pool) => {
   const [rows] = await conn.query('SELECT * FROM fiscal_years WHERE user_id = ? ORDER BY start_date DESC', [userId])
@@ -39,13 +21,49 @@ fiscalYearsRouter.get('/', async (req, res, next) => {
 fiscalYearsRouter.post('/', async (req, res, next) => {
   const { name, startDate, endDate } = req.body
   if (!name || !startDate || !endDate) { res.status(400).json({ message: '必須項目が不足しています' }); return }
+  if (startDate >= endDate) { res.status(400).json({ message: '開始日は終了日より前にしてください' }); return }
   try {
+    // 期間が既存年度と重なる場合は拒否（仕訳の帰属が曖昧になるため）
+    const [overlaps] = await pool.query(
+      'SELECT name FROM fiscal_years WHERE user_id = ? AND start_date <= ? AND end_date >= ? LIMIT 1',
+      [req.userId, endDate, startDate]
+    ) as any
+    if (overlaps.length) {
+      res.status(400).json({ message: `期間が「${overlaps[0].name}」と重複しています` }); return
+    }
     await pool.query('INSERT INTO fiscal_years (user_id, name, start_date, end_date) VALUES (?, ?, ?, ?)', [req.userId, name, startDate, endDate])
     res.status(201).json(await allFiscalYears(req.userId))
   } catch (e) { next(e) }
 })
 
-// 決算処理：損益振替仕訳を作成し、年度を締める
+// 科目の期末残高（正常残高側を正）を種別指定で集計する
+async function balancesAsOf(conn: any, userId: number, endDate: string, types: string[]) {
+  const [accRows] = await conn.query(
+    'SELECT code, type FROM accounts WHERE user_id = ? AND type IN (?)', [userId, types]
+  ) as any
+  const typeOf = new Map<string, string>(accRows.map((r: any) => [r.code, r.type]))
+  const [lineRows] = await conn.query(
+    `SELECT jl.account_code, jl.side, jl.amount
+     FROM journal_lines jl JOIN journals j ON jl.journal_id = j.id
+     WHERE j.user_id = ? AND j.date <= ?`, [userId, endDate]
+  ) as any
+  const balances = new Map<string, number>()
+  for (const l of lineRows) {
+    const t = typeOf.get(l.account_code)
+    if (!t) continue
+    const d = l.amount * balanceSign(t, l.side)
+    balances.set(l.account_code, (balances.get(l.account_code) ?? 0) + d)
+  }
+  return { balances, typeOf }
+}
+
+/**
+ * 決算処理：
+ *  1. 減価償却費の計上（固定資産台帳から・決算整理仕訳）
+ *  2. 消費税の整理（仮受・仮払の相殺 → 未払/未収還付消費税・決算整理仕訳）
+ *  3. 損益振替（収益・費用 → 利益剰余金・決算振替仕訳）
+ * を行い、年度を締める。
+ */
 fiscalYearsRouter.put('/:id/close', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
@@ -55,74 +73,97 @@ fiscalYearsRouter.put('/:id/close', async (req, res, next) => {
     if (!fy) { await conn.rollback(); res.status(404).json({ message: '会計年度が見つかりません' }); return }
     if (fy.closed) { await conn.rollback(); res.status(400).json({ message: '既に締め済みです' }); return }
 
-    const endDate = String(fy.end_date).slice(0, 10)
+    const startDate = String(fy.start_date).slice(0, 10)
+    const endDate   = String(fy.end_date).slice(0, 10)
+    const notes: string[] = []
 
-    // 損益科目（収益・費用）の年度末時点の残高を集計
-    const [accRows] = await conn.query("SELECT code, type FROM accounts WHERE user_id = ? AND type IN ('revenue','expense','equity')", [req.userId]) as any
-    const typeOf = new Map<string, string>(accRows.map((r: any) => [r.code, r.type]))
-    const [lineRows] = await conn.query(
-      `SELECT jl.account_code, jl.side, jl.amount
-       FROM journal_lines jl JOIN journals j ON jl.journal_id = j.id
-       WHERE j.user_id = ? AND j.date <= ?`, [req.userId, endDate]
-    ) as any
-
-    const plBalance = new Map<string, number>() // 正常残高側を正
-    for (const l of lineRows) {
-      const t = typeOf.get(l.account_code)
-      if (t !== 'revenue' && t !== 'expense') continue
-      const d = l.amount * balanceSign(t, l.side)
-      plBalance.set(l.account_code, (plBalance.get(l.account_code) ?? 0) + d)
+    // ── 1. 減価償却（定額法・月割） ──
+    const [assetRows] = await conn.query('SELECT * FROM fixed_assets WHERE user_id = ?', [req.userId]) as any
+    let depTotal = 0
+    for (const a of assetRows) {
+      depTotal += depreciationForPeriod(
+        { acquisitionDate: String(a.acquisition_date).slice(0, 10), cost: a.cost, usefulLifeYears: a.useful_life },
+        startDate, endDate,
+      )
+    }
+    if (depTotal > 0) {
+      await ensureAccount(conn, req.userId, STD_CODES.depreciationExpense, '減価償却費', 'expense')
+      await ensureAccount(conn, req.userId, STD_CODES.accumulatedDep, '減価償却累計額', 'asset')
+      await insertJournal(conn, req.userId, {
+        fiscalYearId: fy.id, date: endDate, memo: '減価償却費計上（決算整理）', kind: 'adjusting',
+        lines: [
+          { side: 'debit',  accountCode: STD_CODES.depreciationExpense, partnerCode: '', amount: depTotal, taxType: 'none' },
+          { side: 'credit', accountCode: STD_CODES.accumulatedDep,      partnerCode: '', amount: depTotal, taxType: 'none' },
+        ],
+      })
+      notes.push(`減価償却費 ${depTotal.toLocaleString()}円`)
     }
 
-    // 振替先：利益剰余金（3020優先、無ければ任意のequity）
+    // ── 2. 消費税の決算整理 ──
+    {
+      const { balances } = await balancesAsOf(conn, req.userId, endDate, ['asset', 'liability'])
+      const paid     = balances.get(STD_CODES.taxPaid) ?? 0
+      const received = balances.get(STD_CODES.taxReceived) ?? 0
+      const taxLines = buildTaxSettlementLines(paid, received, {
+        paid: STD_CODES.taxPaid, received: STD_CODES.taxReceived,
+        payable: STD_CODES.taxPayable, receivable: STD_CODES.taxReceivable,
+      })
+      if (taxLines.length) {
+        await ensureAccount(conn, req.userId, STD_CODES.taxPayable, '未払消費税', 'liability')
+        await ensureAccount(conn, req.userId, STD_CODES.taxReceivable, '未収還付消費税', 'asset')
+        await insertJournal(conn, req.userId, {
+          fiscalYearId: fy.id, date: endDate, memo: '消費税決算整理仕訳', kind: 'adjusting',
+          lines: taxLines.map(l => ({ ...l, partnerCode: '', taxType: 'none' as const })),
+        })
+        const net = received - paid
+        notes.push(net >= 0 ? `未払消費税 ${net.toLocaleString()}円` : `未収還付消費税 ${(-net).toLocaleString()}円`)
+      }
+    }
+
+    // ── 3. 損益振替 ──
+    // 振替先：利益剰余金（3020優先、無ければ名前で検索）
     const [reRows] = await conn.query(
-      "SELECT code FROM accounts WHERE user_id = ? AND type='equity' AND (code='3020' OR name LIKE '%利益剰余金%') ORDER BY (code='3020') DESC LIMIT 1",
-      [req.userId]
+      "SELECT code FROM accounts WHERE user_id = ? AND type='equity' AND (code=? OR name LIKE '%利益剰余金%') ORDER BY (code=?) DESC LIMIT 1",
+      [req.userId, STD_CODES.retainedEarnings, STD_CODES.retainedEarnings]
     ) as any
     const reCode = reRows[0]?.code
     if (!reCode) { await conn.rollback(); res.status(400).json({ message: '利益剰余金（純資産）科目が見つかりません' }); return }
 
-    // 振替明細を構築：収益は借方、費用は貸方で打ち消し、差額を利益剰余金へ
-    const lines: { side: 'debit'|'credit'; code: string; amount: number }[] = []
-    let revenueTotal = 0, expenseTotal = 0
-    for (const [code, bal] of plBalance) {
-      if (bal === 0) continue
-      const t = typeOf.get(code)
-      if (t === 'revenue') { lines.push({ side: 'debit',  code, amount: bal }); revenueTotal  += bal }
-      else                 { lines.push({ side: 'credit', code, amount: bal }); expenseTotal  += bal }
+    // 償却費計上後の損益残高を集計（このトランザクション内の追加仕訳も含む）
+    const { balances: plRaw, typeOf } = await balancesAsOf(conn, req.userId, endDate, ['revenue', 'expense'])
+    const plBalances = new Map<string, PlBalance>()
+    for (const [code, balance] of plRaw) {
+      plBalances.set(code, { type: typeOf.get(code) as 'revenue' | 'expense', balance })
     }
-    const net = revenueTotal - expenseTotal // 当期純利益（プラス=黒字）
-    if (net > 0)      lines.push({ side: 'credit', code: reCode, amount: net })
-    else if (net < 0) lines.push({ side: 'debit',  code: reCode, amount: -net })
-
-    // 損益がある場合のみ振替仕訳を作成
-    if (lines.length > 0) {
-      const [result] = await conn.query(
-        'INSERT INTO journals (user_id, fiscal_year_id, date, memo) VALUES (?, ?, ?, ?)',
-        [req.userId, fy.id, endDate, `${CLOSING_MEMO}（当期純利益 ${net.toLocaleString()}）`]
-      ) as any
-      const jid = result.insertId
-      await conn.query(
-        'INSERT INTO journal_lines (journal_id, side, account_code, partner_code, amount, tax_type) VALUES ?',
-        [lines.map(l => [jid, l.side, l.code, '', l.amount, 'none'])]
-      )
+    const { lines: transferLines, net } = buildProfitTransferLines(plBalances, reCode)
+    if (transferLines.length) {
+      await insertJournal(conn, req.userId, {
+        fiscalYearId: fy.id, date: endDate,
+        memo: `決算振替仕訳（当期純利益 ${net.toLocaleString()}）`, kind: 'closing',
+        lines: transferLines.map(l => ({ ...l, partnerCode: '', taxType: 'none' as const })),
+      })
     }
 
     await conn.query('UPDATE fiscal_years SET closed = 1 WHERE id = ? AND user_id = ?', [fy.id, req.userId])
     await recomputeBalances(conn, req.userId)
     await conn.commit()
-    res.json({ message: `決算処理が完了しました（当期純利益: ${net.toLocaleString()} 円）`, fiscalYears: await allFiscalYears(req.userId, conn) })
+
+    const detail = notes.length ? `、${notes.join('、')}` : ''
+    res.json({
+      message: `決算処理が完了しました（当期純利益: ${net.toLocaleString()} 円${detail}）`,
+      fiscalYears: await allFiscalYears(req.userId),
+    })
   } catch (e) { await conn.rollback(); next(e) } finally { conn.release() }
 })
 
-// 決算取消：損益振替仕訳を削除し、締めを解除
+// 決算取消：決算整理・振替仕訳（kind で判定）を削除し、締めを解除
 fiscalYearsRouter.put('/:id/reopen', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
     await conn.query(
-      'DELETE FROM journals WHERE fiscal_year_id = ? AND user_id = ? AND memo LIKE ?',
-      [req.params.id, req.userId, `${CLOSING_MEMO}%`]
+      "DELETE FROM journals WHERE fiscal_year_id = ? AND user_id = ? AND kind IN ('adjusting','closing')",
+      [req.params.id, req.userId]
     )
     await conn.query('UPDATE fiscal_years SET closed = 0 WHERE id = ? AND user_id = ?', [req.params.id, req.userId])
     await recomputeBalances(conn, req.userId)

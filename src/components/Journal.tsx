@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useApp } from '../store'
-import type { Journal, JournalLine, TaxType } from '../types'
-import { TAX_LABELS } from '../types'
+import { api } from '../api'
+import type { Journal, JournalLine, TaxType, JournalHistoryEntry } from '../types'
+import { TAX_LABELS, KIND_LABELS } from '../types'
 import Modal from './Modal'
 
 type LineDraft = Omit<JournalLine, 'id' | 'journalId'>
@@ -61,6 +62,8 @@ export default function JournalPage() {
   const { accounts, partners, subAccounts, journals, fiscalYears, currentFiscalYearId, setCurrentFiscalYearId, addJournal, updateJournal, deleteJournal } = useApp()
   const [alertMsg, setAlertMsg]     = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Journal | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<Journal | null>(null)
+  const [history, setHistory]       = useState<JournalHistoryEntry[] | null>(null)
   const [form, setForm]             = useState<JournalForm>(emptyForm(currentFiscalYearId ?? 1))
   const [open, setOpen]             = useState(false)
   // 検索条件
@@ -161,7 +164,7 @@ export default function JournalPage() {
     if (form.lines.length < 2) { alert('明細行は2行以上必要です'); return }
     if (!balanced) { alert(`借方合計(${debitTotal.toLocaleString()})と貸方合計(${creditTotal.toLocaleString()})が一致しません`); return }
     try {
-      if (editTarget) { await updateJournal({ ...form, id: editTarget.id, lines: form.lines.map((l, i) => ({ ...l, id: editTarget.lines[i]?.id ?? 0, journalId: editTarget.id })) }); flash('仕訳を更新しました') }
+      if (editTarget) { await updateJournal({ ...form, id: editTarget.id, kind: editTarget.kind, lines: form.lines.map((l, i) => ({ ...l, id: editTarget.lines[i]?.id ?? 0, journalId: editTarget.id })) }); flash('仕訳を更新しました') }
       else            { await addJournal({ ...form, lines: form.lines.map(l => ({ ...l, id: 0, journalId: 0 })) }); flash('仕訳を保存しました') }
       setOpen(false)
     } catch (e) { alert(e instanceof Error ? e.message : '保存に失敗しました') }
@@ -170,6 +173,12 @@ export default function JournalPage() {
   const handleDelete = async (id: number) => {
     if (!confirm('この仕訳を削除しますか？')) return
     try { await deleteJournal(id) } catch (e) { alert(e instanceof Error ? e.message : '削除に失敗しました') }
+  }
+
+  const openHistory = async (j: Journal) => {
+    setHistoryTarget(j); setHistory(null)
+    try { setHistory(await api.journalHistory(j.id)) }
+    catch { setHistory([]) }
   }
 
   const currentFY = fiscalYears.find(f => f.id === currentFiscalYearId)
@@ -246,7 +255,12 @@ export default function JournalPage() {
                     const cAcc = c ? getAccount(c.accountCode) : null
                     return (
                       <tr key={`${j.id}-${ri}`} style={{ borderTop: ri === 0 ? '1.5px solid #e8e5dc' : '0.5px solid #f5f3ee' }}>
-                        {ri === 0 && <td rowSpan={rows} style={{ color: '#888', verticalAlign: 'middle', borderRight: '0.5px solid #f0ede6' }}>{j.date}</td>}
+                        {ri === 0 && <td rowSpan={rows} style={{ color: '#888', verticalAlign: 'middle', borderRight: '0.5px solid #f0ede6' }}>
+                          {j.date}
+                          {j.kind !== 'normal' && (
+                            <div><span className="tag tag-sub" style={{ fontSize: 10 }}>{KIND_LABELS[j.kind]}</span></div>
+                          )}
+                        </td>}
                         {/* 借方 */}
                         <td style={{ background: '#f9f9fd' }}>
                           {dAcc && <span className="account-badge" style={{ background: TYPE_BG[dAcc.type], color: TYPE_COLORS[dAcc.type] }}>{dAcc.name}</span>}
@@ -274,8 +288,9 @@ export default function JournalPage() {
                         {ri === 0 && <td rowSpan={rows} style={{ color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'middle' }}>{j.memo}</td>}
                         {ri === 0 && <td rowSpan={rows} style={{ verticalAlign: 'middle' }}>
                           <div className="actions-cell">
-                            {!isClosed && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
-                            {!isClosed && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
+                            {!isClosed && j.kind !== 'adjusting' && j.kind !== 'closing' && <button className="icon-btn" onClick={() => openEdit(j)} title="編集"><i className="ti ti-pencil" /></button>}
+                            {!isClosed && j.kind !== 'adjusting' && j.kind !== 'closing' && <button className="icon-btn danger" onClick={() => handleDelete(j.id)} title="削除"><i className="ti ti-trash" /></button>}
+                            <button className="icon-btn" onClick={() => openHistory(j)} title="変更履歴"><i className="ti ti-history" /></button>
                           </div>
                         </td>}
                       </tr>
@@ -418,6 +433,38 @@ export default function JournalPage() {
             <span>貸方合計 {creditTotal.toLocaleString()} 円</span>
             <strong>{balanced ? '貸借一致 ✓' : '貸借不一致 ✗'}</strong>
           </div>
+        </Modal>
+      )}
+
+      {historyTarget && (
+        <Modal
+          title={<><i className="ti ti-history" />変更履歴（{historyTarget.date} {historyTarget.memo || '摘要なし'}）</>}
+          onClose={() => setHistoryTarget(null)} onSubmit={() => setHistoryTarget(null)} submitLabel="閉じる">
+          {history === null && <div style={{ color: '#888', fontSize: 13 }}>読み込み中...</div>}
+          {history?.length === 0 && <div style={{ color: '#888', fontSize: 13 }}>履歴がありません（履歴機能の導入前に作成された仕訳です）</div>}
+          {(history ?? []).map(h => {
+            const ACTION_LABELS = { create: '作成', update: '更新（変更前の内容）', delete: '削除（削除時の内容）' }
+            return (
+              <div key={h.id} style={{ border: '0.5px solid #e8e5dc', borderRadius: 8, padding: '8px 12px', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, marginBottom: 6 }}>
+                  <strong>{ACTION_LABELS[h.action]}</strong>
+                  <span style={{ color: '#888', marginLeft: 8 }}>{new Date(h.createdAt).toLocaleString('ja-JP')}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>{h.snapshot.date}　{h.snapshot.memo || '（摘要なし）'}</div>
+                <table style={{ width: '100%', fontSize: 12 }}>
+                  <tbody>
+                    {h.snapshot.lines.map((l, i) => (
+                      <tr key={i}>
+                        <td style={{ width: 50, color: l.side === 'debit' ? '#3C3489' : '#993C1D' }}>{l.side === 'debit' ? '借方' : '貸方'}</td>
+                        <td>{getAccount(l.accountCode)?.name ?? l.accountCode}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{l.amount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
         </Modal>
       )}
     </div>
